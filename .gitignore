@@ -41,6 +41,9 @@ frontend/src-tauri/target/
 *.swp
 *.swo
 *~
+.agent/
+.trae/
+.kiro/
 
 # OS
 .DS_Store
