@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
+import { APP_VERSION } from '../config/version';
 
 const { Header, Sider, Content } = Layout;
 
@@ -86,7 +87,22 @@ const MainLayout: React.FC = () => {
         />
       </Sider>
       <Layout>
-        <Header style={{ padding: 0, background: colorBgContainer }} />
+        <Header style={{ 
+          padding: '0 24px', 
+          background: colorBgContainer,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: '1px solid #f0f0f0'
+        }}>
+          <div style={{ 
+            fontSize: '18px', 
+            fontWeight: 'bold',
+            color: '#1890ff'
+          }}>
+            眼科注射预约系统
+          </div>
+        </Header>
         <Content style={{ margin: '16px 16px' }}>
           <div
             style={{

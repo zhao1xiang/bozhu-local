@@ -7,3 +7,5 @@ python-jose[cryptography]
 passlib[bcrypt]
 pydantic
 python-dateutil
+PyInstaller
+openpyxl

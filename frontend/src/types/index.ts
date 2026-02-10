@@ -52,6 +52,8 @@ export interface Appointment {
   patient?: Patient;
   pre_op_vision_left?: number;
   pre_op_vision_right?: number;
+  pre_op_cst_left?: number;
+  pre_op_cst_right?: number;
   treatment_phase?: string;
 }
 

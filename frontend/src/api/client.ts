@@ -1,20 +1,58 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+// 使用 127.0.0.1 而不是 localhost，在 Tauri 环境中更可靠
+const API_BASE_URL = 'http://127.0.0.1:8000/api';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 30000, // 增加到 30 秒，给后端更多启动时间
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Response interceptor for error handling
+// 重试配置
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 2000; // 2 秒
+
+// 延迟函数
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Request interceptor for retry logic
+apiClient.interceptors.request.use(
+  (config) => {
+    // 添加重试计数
+    config.headers['X-Retry-Count'] = config.headers['X-Retry-Count'] || '0';
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor for error handling and retry
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const config = error.config;
+    
+    // 如果是网络错误或超时，尝试重试
+    if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK' || error.message.includes('timeout')) {
+      const retryCount = parseInt(config.headers['X-Retry-Count'] || '0');
+      
+      if (retryCount < MAX_RETRIES) {
+        config.headers['X-Retry-Count'] = (retryCount + 1).toString();
+        console.log(`后端连接失败，${RETRY_DELAY / 1000} 秒后重试 (${retryCount + 1}/${MAX_RETRIES})...`);
+        
+        // 等待后重试
+        await delay(RETRY_DELAY);
+        return apiClient(config);
+      } else {
+        console.error('后端连接失败，已达到最大重试次数');
+        error.message = '无法连接到后端服务，请稍后重试或联系管理员';
+      }
+    }
+    
     console.error('API Error:', error);
     return Promise.reject(error);
   }
 );
+

@@ -265,7 +265,7 @@ const Patients: React.FC = () => {
     const headerStyle = {
       font: { bold: true, size: 11, name: 'Microsoft YaHei' },
       alignment: { horizontal: 'center' as const, vertical: 'middle' as const, wrapText: true },
-      fill: { type: 'pattern' as const, pattern: 'solid', fgColor: { argb: 'FFE8F4FC' } },
+      fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFE8F4FC' } },
       border: {
         top: { style: 'thin' as const },
         left: { style: 'thin' as const },
@@ -275,7 +275,7 @@ const Patients: React.FC = () => {
     };
     const subHeaderStyle = {
       ...headerStyle,
-      fill: { type: 'pattern' as const, pattern: 'solid', fgColor: { argb: 'FFF0F7FF' } }
+      fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFF0F7FF' } }
     };
     const dataCellStyle = {
       font: { size: 10, name: 'Microsoft YaHei' },
