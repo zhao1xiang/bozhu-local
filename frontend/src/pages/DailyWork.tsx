@@ -7,9 +7,11 @@ import { Appointment, Patient } from '@/types';
 import { apiClient } from '@/api/client';
 import { useNavigate } from 'react-router-dom';
 
+const { RangePicker } = DatePicker;
+
 const DailyWork: React.FC = () => {
   const navigate = useNavigate();
-  const [selectedDate, setSelectedDate] = useState<Dayjs>(dayjs());
+  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>([dayjs(), dayjs()]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(false);
@@ -25,13 +27,14 @@ const DailyWork: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const dateStr = selectedDate.format('YYYY-MM-DD');
+      const startDate = dateRange[0].format('YYYY-MM-DD');
+      const endDate = dateRange[1].format('YYYY-MM-DD');
       const [patientsRes, appointmentsRes] = await Promise.all([
         apiClient.get<Patient[]>('/patients'),
         apiClient.get<Appointment[]>('/appointments', {
           params: {
-            start_date: dateStr,
-            end_date: dateStr
+            start_date: startDate,
+            end_date: endDate
           }
         })
       ]);
@@ -61,7 +64,7 @@ const DailyWork: React.FC = () => {
   useEffect(() => {
     fetchData();
     fetchReminders();
-  }, [selectedDate]);
+  }, [dateRange]);
 
   const handleStatusUpdate = async (record: Appointment, status: string) => {
     try {
@@ -195,10 +198,11 @@ const DailyWork: React.FC = () => {
             children: (
               <div>
                 <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-                  <DatePicker
-                    value={selectedDate}
-                    onChange={(date) => date && setSelectedDate(date)}
+                  <RangePicker
+                    value={dateRange}
+                    onChange={(dates) => dates && setDateRange([dates[0]!, dates[1]!])}
                     allowClear={false}
+                    format="YYYY-MM-DD"
                   />
                 </div>
                 <Table

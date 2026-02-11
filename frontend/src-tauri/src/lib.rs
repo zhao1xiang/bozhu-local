@@ -33,9 +33,45 @@ fn log_to_file(message: &str) {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn kill_all_backend_processes() {
+    log_to_file("检查并清理已存在的 backend_server.exe 进程...");
+    
+    // 使用 taskkill 强制终止所有 backend_server.exe 进程（静默执行，不显示窗口）
+    let mut cmd = Command::new("taskkill");
+    cmd.args(&["/F", "/IM", "backend_server.exe"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    
+    // 设置 CREATE_NO_WINDOW 标志，防止弹出黑窗口
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    
+    match cmd.status() {
+        Ok(status) => {
+            if status.success() {
+                log_to_file("✓ 清理成功：已终止所有 backend_server.exe 进程");
+            } else {
+                // 如果没有找到进程，taskkill 会返回错误，这是正常的
+                log_to_file("没有找到运行中的 backend_server.exe 进程（或已清理）");
+            }
+        }
+        Err(e) => {
+            log_to_file(&format!("执行 taskkill 失败: {}", e));
+        }
+    }
+    
+    // 等待进程完全终止
+    std::thread::sleep(std::time::Duration::from_millis(500));
+}
+
 #[tauri::command]
 async fn start_backend(state: State<'_, BackendProcess>) -> Result<String, String> {
     log_to_file("=== 开始启动后端 ===");
+    
+    // 先清理所有已存在的后端进程
+    #[cfg(target_os = "windows")]
+    kill_all_backend_processes();
     
     let mut process_guard = state.0.lock().unwrap();
     
@@ -150,6 +186,13 @@ fn stop_backend(state: &State<BackendProcess>) {
         log_to_file("后端进程不存在或已经停止");
     }
     
+    // 额外保险：使用 taskkill 强制终止所有 backend_server.exe 进程
+    #[cfg(target_os = "windows")]
+    {
+        log_to_file("执行额外清理：强制终止所有 backend_server.exe 进程");
+        kill_all_backend_processes();
+    }
+    
     log_to_file("=== 后端关闭完成 ===");
 }
 
@@ -207,6 +250,20 @@ pub fn run() {
             
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                log_to_file("窗口已销毁，确保后端关闭");
+                let state = window.state::<BackendProcess>();
+                stop_backend(&state);
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                log_to_file("应用退出请求，关闭后端");
+                let state = app_handle.state::<BackendProcess>();
+                stop_backend(&state);
+            }
+        });
 }
