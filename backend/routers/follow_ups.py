@@ -20,10 +20,12 @@ def get_reminders(session: Session = Depends(get_session)):
     today = date.today()
     target_date = today + timedelta(days=days_advance)
 
-    # 2. Find appointments where next_follow_up_date is between today and target_date (inclusive)
+    # 2. Find appointments where follow_up_date is between today and target_date (inclusive)
+    # Only include scheduled or confirmed appointments (not completed or cancelled)
     query = select(Appointment).where(
-        Appointment.next_follow_up_date >= today,
-        Appointment.next_follow_up_date <= target_date
+        Appointment.follow_up_date >= today,
+        Appointment.follow_up_date <= target_date,
+        Appointment.status.in_(['scheduled', 'confirmed'])
     )
     appointments = session.exec(query).all()
     
@@ -31,9 +33,9 @@ def get_reminders(session: Session = Depends(get_session)):
     results = []
     for appt in appointments:
         # Find latest follow-up record for this appointment
-        # Assuming one appointment might be called multiple times? Usually yes.
-        # We want the latest status.
-        record_query = select(FollowUpRecord).where(FollowUpRecord.appointment_id == appt.id).order_by(FollowUpRecord.created_at.desc())
+        record_query = select(FollowUpRecord).where(
+            FollowUpRecord.appointment_id == appt.id
+        ).order_by(FollowUpRecord.created_at.desc())
         latest_record = session.exec(record_query).first()
         
         appt_dict = appt.model_dump()

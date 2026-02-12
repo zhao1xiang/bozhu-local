@@ -17,6 +17,9 @@ const Patients: React.FC = () => {
   const [drugs, setDrugs] = useState<DataDictionaryItem[]>([]);
   const [diagnoses, setDiagnoses] = useState<DataDictionaryItem[]>([]);
   const [searchText, setSearchText] = useState('');
+  const [diagnosisFilter, setDiagnosisFilter] = useState<string | undefined>(undefined);
+  const [drugFilter, setDrugFilter] = useState<string | undefined>(undefined);
+  const [eyeFilter, setEyeFilter] = useState<string | undefined>(undefined);
 
   // Patient Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -431,11 +434,15 @@ const Patients: React.FC = () => {
       title: '诊断',
       dataIndex: 'diagnosis',
       key: 'diagnosis',
+      filteredValue: diagnosisFilter ? [diagnosisFilter] : null,
+      onFilter: (value, record) => record.diagnosis === value,
     },
     {
       title: '药物',
       dataIndex: 'drug_type',
       key: 'drug_type',
+      filteredValue: drugFilter ? [drugFilter] : null,
+      onFilter: (value, record) => record.drug_type === value,
       render: (text) => <Tag color={text === '法瑞西单抗' ? 'purple' : 'default'}>{text}</Tag>,
     },
     {
@@ -454,6 +461,13 @@ const Patients: React.FC = () => {
     {
       title: '治疗眼',
       key: 'eye',
+      filteredValue: eyeFilter ? [eyeFilter] : null,
+      onFilter: (value, record) => {
+        if (value === 'left') return record.left_eye;
+        if (value === 'right') return record.right_eye;
+        if (value === 'both') return record.left_eye && record.right_eye;
+        return true;
+      },
       render: (_, record) => (
         <span>
           {record.left_eye ? '左眼' : ''} {record.right_eye ? '右眼' : ''}
@@ -494,12 +508,47 @@ const Patients: React.FC = () => {
   return (
     <div>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-        <Input
-          placeholder="搜索姓名或电话"
-          prefix={<SearchOutlined />}
-          style={{ width: 200 }}
-          onChange={(e) => setSearchText(e.target.value)}
-        />
+        <Space>
+          <Input
+            placeholder="搜索姓名/电话/门诊号"
+            prefix={<SearchOutlined />}
+            style={{ width: 200 }}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+          <Select
+            placeholder="诊断"
+            style={{ width: 150 }}
+            allowClear
+            value={diagnosisFilter}
+            onChange={(value) => setDiagnosisFilter(value)}
+          >
+            {diagnoses.map(d => (
+              <Select.Option key={d.id} value={d.value}>{d.label}</Select.Option>
+            ))}
+          </Select>
+          <Select
+            placeholder="药物"
+            style={{ width: 150 }}
+            allowClear
+            value={drugFilter}
+            onChange={(value) => setDrugFilter(value)}
+          >
+            {drugs.map(d => (
+              <Select.Option key={d.id} value={d.value}>{d.label}</Select.Option>
+            ))}
+          </Select>
+          <Select
+            placeholder="治疗眼"
+            style={{ width: 120 }}
+            allowClear
+            value={eyeFilter}
+            onChange={(value) => setEyeFilter(value)}
+          >
+            <Select.Option value="left">左眼</Select.Option>
+            <Select.Option value="right">右眼</Select.Option>
+            <Select.Option value="both">双眼</Select.Option>
+          </Select>
+        </Space>
         <Space>
           <Button icon={<DownloadOutlined />} onClick={handleExport}>
             导出

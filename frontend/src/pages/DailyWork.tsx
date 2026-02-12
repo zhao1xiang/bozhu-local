@@ -122,6 +122,11 @@ const DailyWork: React.FC = () => {
 
   const columns = [
     {
+      title: '玻注日期',
+      dataIndex: 'appointment_date',
+      render: (text: string) => text ? dayjs(text).format('YYYY-MM-DD') : '-'
+    },
+    {
       title: '注药号',
       dataIndex: 'injection_number',
     },
@@ -246,13 +251,8 @@ const DailyWork: React.FC = () => {
                       }
                     },
                     {
-                      title: '上一次注药日期',
-                      dataIndex: 'appointment_date',
-                      render: (text) => dayjs(text).format('YYYY-MM-DD')
-                    },
-                    {
-                      title: '计划复诊日期',
-                      dataIndex: 'next_follow_up_date',
+                      title: '复诊日期',
+                      dataIndex: 'follow_up_date',
                       render: (text) => text ? dayjs(text).format('YYYY-MM-DD') : '-'
                     },
                     {
