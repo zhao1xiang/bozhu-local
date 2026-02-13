@@ -71,3 +71,8 @@ def fix_admin():
 @app.get("/")
 def read_root():
     return {"message": "Welcome to Eye Injection Appointment System API"}
+
+@app.get("/api/health")
+def health_check():
+    """健康检查端点，用于前端检测后端是否就绪"""
+    return {"status": "ok", "message": "Backend is ready"}

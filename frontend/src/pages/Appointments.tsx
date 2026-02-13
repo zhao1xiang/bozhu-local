@@ -24,7 +24,10 @@ const Appointments: React.FC = () => {
 
   // 根据系统配置的玻注日，从给定日期开始向后寻找最近的一个玻注日
   const getNearestInjectionDate = (baseDate: Dayjs, weekdays: string[]): Dayjs => {
+    console.log('getNearestInjectionDate called:', { baseDate: baseDate.format('YYYY-MM-DD'), weekdays });
+    
     if (!weekdays || weekdays.length === 0) {
+      console.log('No weekdays configured, returning baseDate');
       return baseDate;
     }
 
@@ -32,36 +35,95 @@ const Appointments: React.FC = () => {
       .map((w) => parseInt(w, 10))
       .filter((n) => !Number.isNaN(n));
 
+    console.log('Allowed weekdays:', allowed);
+
     if (allowed.length === 0) {
+      console.log('No valid weekdays after parsing, returning baseDate');
       return baseDate;
     }
 
-    // 理论上 7 天内一定能找到一个匹配的星期，这里给 14 天冗余
+    // 从今天开始查找（i=0），理论上 7 天内一定能找到一个匹配的星期
     for (let i = 0; i < 14; i++) {
       const candidate = baseDate.add(i, 'day');
       const day = candidate.day(); // 0-6，周日为 0
       const weekday = day === 0 ? 7 : day; // 转为 1-7
+      console.log(`Day ${i}: ${candidate.format('YYYY-MM-DD')} is weekday ${weekday}, allowed: ${allowed.includes(weekday)}`);
       if (allowed.includes(weekday)) {
+        console.log('Found matching date:', candidate.format('YYYY-MM-DD'));
         return candidate;
       }
     }
 
+    console.log('No matching date found in 14 days, returning baseDate');
     return baseDate;
   };
 
-  const startBatchGeneration = () => {
-    const base = getNearestInjectionDate(dayjs(), injectionWeekdays);
+  const startBatchGeneration = async () => {
+    console.log('startBatchGeneration - injectionWeekdays:', injectionWeekdays);
+    
+    // 获取当前选中的患者ID
+    const patientId = form.getFieldValue('patient_id');
+    if (!patientId) {
+      message.warning('请先选择患者');
+      return;
+    }
+
+    let baseDate = dayjs();
+    let startInjectionCount = 1;
+
+    // 先从患者表中获取已完成针数
+    const patient = patients.find(p => p.id === patientId);
+    let maxInjectionCount = patient?.injection_count || 0;
+
+    // 获取该患者的预约历史
+    try {
+      const response = await apiClient.get<Appointment[]>('/appointments', {
+        params: { patient_id: patientId, limit: 1000 }
+      });
+      const patientAppointments = response.data;
+      
+      if (patientAppointments && patientAppointments.length > 0) {
+        // 找到最大针数的预约
+        const maxInjectionAppointment = patientAppointments.reduce((max, current) => {
+          return (current.injection_count || 0) > (max.injection_count || 0) ? current : max;
+        });
+        
+        // 取患者表和预约历史中的最大值
+        if (maxInjectionAppointment.injection_count) {
+          maxInjectionCount = Math.max(maxInjectionCount, maxInjectionAppointment.injection_count);
+        }
+        
+        // 从最后一次预约日期+1个月开始
+        if (maxInjectionAppointment.appointment_date) {
+          baseDate = dayjs(maxInjectionAppointment.appointment_date).add(1, 'month');
+        }
+      }
+      
+      // 下一针 = 最大针数 + 1
+      if (maxInjectionCount > 0) {
+        startInjectionCount = maxInjectionCount + 1;
+      }
+    } catch (error) {
+      console.error('获取患者预约历史失败:', error);
+    }
+
+    console.log('Batch generation starting from:', { startInjectionCount, baseDate: baseDate.format('YYYY-MM-DD') });
+
+    // 生成4次预约
     const batchList = [];
     for (let i = 0; i < 4; i++) {
-      const monthBase = base.add(i, 'month');
+      const monthBase = i === 0 ? baseDate : baseDate.add(i, 'month');
       const date = getNearestInjectionDate(monthBase, injectionWeekdays);
+      const injectionCount = startInjectionCount + i;
       batchList.push({
         appointment_date: date,
         follow_up_date: date,
-        injection_count: i + 1,
-        treatment_phase: '强化期'
+        injection_count: injectionCount,
+        treatment_phase: injectionCount > 4 ? '巩固期' : '强化期'
       });
     }
+    
+    console.log('Generated batch list:', batchList);
     form.setFieldsValue({ appointment_list: batchList });
     setShowBatchHint(false);
   };
@@ -176,30 +238,117 @@ const Appointments: React.FC = () => {
         fetchDoctors(),
         fetchDrugs(),
         fetchCostTypes(),
-        fetchInjectionWeekdays()
       ]);
       const patientData = results[1] as Patient[];
 
-      const patientId = searchParams.get('patient_id');
-      if (patientId) {
-        handleAdd(patientId, patientData);
+      // 单独获取玻注日配置
+      try {
+        const response = await apiClient.get('/system-settings/injection_weekday');
+        const rawValue = response.data?.value ?? '';
+        const list = rawValue
+          ? String(rawValue)
+              .split(',')
+              .map((v: string) => v.trim())
+              .filter(Boolean)
+          : [];
+        const weekdaysConfig = list.length ? list : ['1'];
+        setInjectionWeekdays(weekdaysConfig);
+
+        // 如果URL中有patient_id参数，使用获取到的配置
+        const patientId = searchParams.get('patient_id');
+        if (patientId) {
+          handleAdd(patientId, patientData, weekdaysConfig);
+        }
+      } catch (error) {
+        console.error(error);
+        setInjectionWeekdays(['1']);
       }
     };
     init();
   }, [searchParams]);
 
 
-  const handleAdd = (preSelectedPatientId?: string, patientsList?: Patient[]) => {
+  const handleAdd = async (preSelectedPatientId?: string, patientsList?: Patient[], weekdaysConfig?: string[]) => {
     form.resetFields();
     const now = dayjs();
-    const firstInjectionDate = getNearestInjectionDate(now, injectionWeekdays);
+    let baseDate = now;
+    let nextInjectionCount = 1;
+    let treatmentPhase = '强化期';
+    let lastDoctor = undefined;
+    let lastCostType = undefined;
+
+    // 使用传入的配置或当前状态
+    const weekdays = weekdaysConfig || injectionWeekdays;
+    console.log('handleAdd - using weekdays:', weekdays);
+
+    // 如果指定了患者，尝试获取该患者的最后一次预约信息
+    if (preSelectedPatientId) {
+      try {
+        const listToUse = patientsList || patients;
+        const patient = listToUse.find(p => p.id === preSelectedPatientId);
+        
+        // 先从患者表中获取已完成针数
+        let maxInjectionCount = patient?.injection_count || 0;
+        
+        const response = await apiClient.get<Appointment[]>('/appointments', {
+          params: { patient_id: preSelectedPatientId, limit: 1000 }
+        });
+        const patientAppointments = response.data;
+        
+        if (patientAppointments && patientAppointments.length > 0) {
+          // 找到最大针数的预约
+          const maxInjectionAppointment = patientAppointments.reduce((max, current) => {
+            return (current.injection_count || 0) > (max.injection_count || 0) ? current : max;
+          });
+          
+          // 取患者表和预约历史中的最大值
+          if (maxInjectionAppointment.injection_count) {
+            maxInjectionCount = Math.max(maxInjectionCount, maxInjectionAppointment.injection_count);
+          }
+          
+          // 从最后一次预约日期+1个月开始
+          if (maxInjectionAppointment.appointment_date) {
+            baseDate = dayjs(maxInjectionAppointment.appointment_date).add(1, 'month');
+            console.log('Patient has history, baseDate:', baseDate.format('YYYY-MM-DD'));
+          }
+          
+          // 延续上次的医生和费别
+          lastDoctor = maxInjectionAppointment.doctor;
+          lastCostType = maxInjectionAppointment.cost_type;
+        }
+        
+        // 下一针 = 最大针数 + 1
+        if (maxInjectionCount > 0) {
+          nextInjectionCount = maxInjectionCount + 1;
+          treatmentPhase = nextInjectionCount > 4 ? '巩固期' : '强化期';
+        }
+        
+        console.log('Patient injection info:', { 
+          patientInjectionCount: patient?.injection_count, 
+          maxFromAppointments: maxInjectionCount,
+          nextInjectionCount 
+        });
+      } catch (error) {
+        console.error('获取患者预约历史失败:', error);
+      }
+    }
+
+    const firstInjectionDate = getNearestInjectionDate(baseDate, weekdays);
 
     let initialValues: any = {
       appointment_date: firstInjectionDate,
       follow_up_date: firstInjectionDate,
-      injection_count: 1,
+      injection_count: nextInjectionCount,
+      treatment_phase: treatmentPhase,
+      doctor: lastDoctor,
+      cost_type: lastCostType,
       appointment_list: [
-        { appointment_date: firstInjectionDate, follow_up_date: firstInjectionDate, injection_count: 1 }
+        { 
+          appointment_date: firstInjectionDate, 
+          follow_up_date: firstInjectionDate, 
+          injection_count: nextInjectionCount,
+          treatment_phase: treatmentPhase
+        }
       ]
     };
 
@@ -211,17 +360,6 @@ const Appointments: React.FC = () => {
       if (patient) {
         initialValues.drug_name = patient.drug_type;
         initialValues.eye = patient.left_eye && patient.right_eye ? '双眼' : (patient.left_eye ? '左眼' : (patient.right_eye ? '右眼' : undefined));
-        
-        // 如果是经治患者且有针数记录，从针数+1开始
-        if (patient.patient_type === '经治' && patient.injection_count) {
-          const nextInjectionCount = patient.injection_count + 1;
-          initialValues.injection_count = nextInjectionCount;
-          initialValues.appointment_list = [{ 
-            appointment_date: firstInjectionDate, 
-            follow_up_date: firstInjectionDate, 
-            injection_count: nextInjectionCount 
-          }];
-        }
         
         setShowBatchHint(patient.drug_type === '法瑞西单抗');
       } else {
@@ -249,31 +387,93 @@ const Appointments: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handlePatientChange = (patientId: string) => {
+  const handlePatientChange = async (patientId: string) => {
+    console.log('=== handlePatientChange START ===');
+    console.log('patientId:', patientId);
+    
     const patient = patients.find(p => p.id === patientId);
+    console.log('Found patient:', patient);
+    
     if (patient) {
-      const updateValues: any = {
+      let baseDate = dayjs();
+      let nextInjectionCount = 1;
+      let treatmentPhase = '强化期';
+      let lastDoctor = undefined;
+      let lastCostType = undefined;
+
+      // 先从患者表中获取已完成针数
+      let maxInjectionCount = patient.injection_count || 0;
+      console.log('Patient injection_count from table:', maxInjectionCount);
+
+      // 获取该患者的预约历史
+      try {
+        console.log('Fetching appointments for patient_id:', patientId);
+        const response = await apiClient.get<Appointment[]>('/appointments', {
+          params: { patient_id: patientId, limit: 1000 }
+        });
+        const patientAppointments = response.data;
+        console.log('API returned appointments count:', patientAppointments?.length || 0);
+        console.log('Patient appointments:', patientAppointments);
+        
+        if (patientAppointments && patientAppointments.length > 0) {
+          // 找到最大针数的预约
+          const maxInjectionAppointment = patientAppointments.reduce((max, current) => {
+            return (current.injection_count || 0) > (max.injection_count || 0) ? current : max;
+          });
+          
+          console.log('Max injection appointment:', maxInjectionAppointment);
+          
+          // 取患者表和预约历史中的最大值
+          if (maxInjectionAppointment.injection_count) {
+            maxInjectionCount = Math.max(maxInjectionCount, maxInjectionAppointment.injection_count);
+          }
+          
+          // 从最后一次预约日期+1个月开始
+          if (maxInjectionAppointment.appointment_date) {
+            baseDate = dayjs(maxInjectionAppointment.appointment_date).add(1, 'month');
+          }
+          
+          // 延续上次的医生和费别
+          lastDoctor = maxInjectionAppointment.doctor;
+          lastCostType = maxInjectionAppointment.cost_type;
+        } else {
+          console.log('No appointments found for this patient');
+        }
+        
+        // 下一针 = 最大针数 + 1
+        if (maxInjectionCount > 0) {
+          nextInjectionCount = maxInjectionCount + 1;
+          treatmentPhase = nextInjectionCount > 4 ? '巩固期' : '强化期';
+        }
+      } catch (error) {
+        console.error('获取患者预约历史失败:', error);
+      }
+
+      console.log('Calculated values:', { maxInjectionCount, nextInjectionCount, treatmentPhase, baseDate: baseDate.format('YYYY-MM-DD') });
+
+      const firstInjectionDate = getNearestInjectionDate(baseDate, injectionWeekdays);
+
+      // 先重置表单中与患者相关的字段
+      form.setFieldsValue({
         drug_name: patient.drug_type,
         eye: patient.left_eye && patient.right_eye ? '双眼' : (patient.left_eye ? '左眼' : (patient.right_eye ? '右眼' : undefined)),
-      };
+        injection_count: nextInjectionCount,
+        treatment_phase: treatmentPhase,
+        appointment_date: firstInjectionDate,
+        follow_up_date: firstInjectionDate,
+        doctor: lastDoctor,
+        cost_type: lastCostType,
+        // 重置预约列表为单个预约
+        appointment_list: [{
+          appointment_date: firstInjectionDate,
+          follow_up_date: firstInjectionDate,
+          injection_count: nextInjectionCount,
+          treatment_phase: treatmentPhase
+        }]
+      });
       
-      // 如果是经治患者且有针数记录，从针数+1开始
-      if (patient.patient_type === '经治' && patient.injection_count) {
-        const nextInjectionCount = patient.injection_count + 1;
-        updateValues.injection_count = nextInjectionCount;
-        
-        // 更新预约列表中的针数
-        const currentList = form.getFieldValue('appointment_list') || [];
-        if (currentList.length > 0) {
-          const updatedList = currentList.map((item: any, index: number) => ({
-            ...item,
-            injection_count: nextInjectionCount + index
-          }));
-          updateValues.appointment_list = updatedList;
-        }
-      }
-      
-      form.setFieldsValue(updateValues);
+      console.log('Form values after setting:', form.getFieldsValue());
+      console.log('=== handlePatientChange END ===');
       setShowBatchHint(patient.drug_type === '法瑞西单抗');
     }
   };

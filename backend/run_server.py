@@ -9,7 +9,7 @@ import logging
 from datetime import datetime
 
 # 应用版本号
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.1.1"
 APP_NAME = "眼科注射预约系统后端"
 
 # 配置日志
@@ -17,14 +17,8 @@ def setup_logging():
     # 获取当前工作目录
     current_dir = os.getcwd()
     
-    # 日志文件在上级目录的 logs 文件夹
-    if getattr(sys, 'frozen', False):
-        # 打包后：当前目录是 backend/，日志在 ../logs/
-        logs_dir = os.path.join(os.path.dirname(current_dir), "logs")
-    else:
-        # 开发环境：直接在当前目录
-        logs_dir = "logs"
-    
+    # 日志文件在 logs 文件夹（同级目录）
+    logs_dir = os.path.join(current_dir, "logs")
     os.makedirs(logs_dir, exist_ok=True)
     log_file = os.path.join(logs_dir, "backend.log")
     

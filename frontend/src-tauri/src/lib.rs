@@ -96,10 +96,8 @@ async fn start_backend(state: State<'_, BackendProcess>) -> Result<String, Strin
 
     log_to_file(&format!("应用目录: {:?}", app_dir));
 
-    // 后端文件在 backend 子目录
-    let backend_dir = app_dir.join("backend");
-    let backend_exe = backend_dir.join("backend_server.exe");
-    log_to_file(&format!("后端目录: {:?}", backend_dir));
+    // 后端文件在同级目录
+    let backend_exe = app_dir.join("backend_server.exe");
     log_to_file(&format!("后端 EXE 路径: {:?}", backend_exe));
     
     if !backend_exe.exists() {
@@ -110,8 +108,8 @@ async fn start_backend(state: State<'_, BackendProcess>) -> Result<String, Strin
     
     log_to_file("✓ 后端 EXE 文件存在");
     
-    // 检查数据库文件（在 backend 目录）
-    let db_file = backend_dir.join("database.db");
+    // 检查数据库文件（在同级目录）
+    let db_file = app_dir.join("database.db");
     if db_file.exists() {
         log_to_file(&format!("✓ 数据库文件存在: {:?}", db_file));
     } else {
@@ -140,7 +138,7 @@ async fn start_backend(state: State<'_, BackendProcess>) -> Result<String, Strin
         })?;
     
     let mut cmd = Command::new(&backend_exe);
-    cmd.current_dir(&backend_dir)  // 在 backend 目录运行
+    cmd.current_dir(&app_dir)  // 在应用根目录运行
         .stdout(Stdio::from(log_output.try_clone().unwrap()))
         .stderr(Stdio::from(log_output));
     
@@ -231,9 +229,9 @@ pub fn run() {
                         eprintln!("Backend startup error: {}", e);
                     }
                 }
-                // 等待后端启动 - 增加到 6 秒确保后端完全就绪
-                log_to_file("等待 6 秒让后端完全启动...");
-                std::thread::sleep(std::time::Duration::from_secs(6));
+                // 等待后端启动 - 增加到 8 秒确保后端完全就绪
+                log_to_file("等待 8 秒让后端完全启动...");
+                std::thread::sleep(std::time::Duration::from_secs(8));
                 log_to_file("后端应该已经就绪");
             });
             

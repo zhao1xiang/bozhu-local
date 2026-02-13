@@ -1,7 +1,9 @@
 import axios from 'axios';
 
-// 使用 127.0.0.1 而不是 localhost，在 Tauri 环境中更可靠
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+// 支持环境变量配置 API 地址
+// Tauri 桌面版使用 127.0.0.1:8000
+// Web 版可以通过 VITE_API_URL 环境变量配置
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -12,8 +14,8 @@ export const apiClient = axios.create({
 });
 
 // 重试配置
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 2000; // 2 秒
+const MAX_RETRIES = 5; // 增加到 5 次
+const RETRY_DELAY = 3000; // 增加到 3 秒
 
 // 延迟函数
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

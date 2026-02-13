@@ -25,32 +25,32 @@ const MainLayout: React.FC = () => {
 
   const items = [
     {
-      key: '/dashboard',
+      key: '/app/dashboard',
       icon: <DashboardOutlined />,
       label: '工作台',
     },
     {
-      key: '/daily-work',
+      key: '/app/daily-work',
       icon: <CheckSquareOutlined />,
       label: '每日工作',
     },
     {
-      key: '/patients',
+      key: '/app/patients',
       icon: <UserOutlined />,
       label: '患者管理',
     },
     {
-      key: '/appointments',
+      key: '/app/appointments',
       icon: <CalendarOutlined />,
       label: '预约管理',
     },
     {
-      key: '/print-center',
+      key: '/app/print-center',
       icon: <PrinterOutlined />,
       label: '打印中心',
     },
     {
-      key: '/system-config',
+      key: '/app/system-config',
       icon: <SettingOutlined />,
       label: '系统配置',
     },

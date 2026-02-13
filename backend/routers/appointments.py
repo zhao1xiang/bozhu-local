@@ -35,6 +35,7 @@ def read_appointments(
     limit: int = 100, 
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    patient_id: Optional[str] = None,
     patient_name: Optional[str] = None,
     injection_number: Optional[str] = None,
     doctor: Optional[str] = None,
@@ -42,6 +43,9 @@ def read_appointments(
 ):
     from models.patient import Patient
     query = select(Appointment)
+    
+    if patient_id:
+        query = query.where(Appointment.patient_id == patient_id)
     
     if patient_name:
         query = query.join(Patient).where(Patient.name.contains(patient_name))

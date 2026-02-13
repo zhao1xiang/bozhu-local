@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Form, Input, Button, Card, message, Typography } from 'antd';
-import { UserOutlined, LockOutlined } from '@ant-design/icons';
+import React, { useState, useEffect } from 'react';
+import { Form, Input, Button, Card, message, Typography, Alert, Spin } from 'antd';
+import { UserOutlined, LockOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { apiClient } from '@/api/client';
@@ -9,8 +9,38 @@ const { Title } = Typography;
 
 const Login: React.FC = () => {
     const [loading, setLoading] = useState(false);
+    const [backendReady, setBackendReady] = useState(false);
+    const [checkingBackend, setCheckingBackend] = useState(true);
     const navigate = useNavigate();
     const { login } = useAuth();
+
+    // 检查后端是否就绪
+    useEffect(() => {
+        const checkBackend = async () => {
+            let attempts = 0;
+            const maxAttempts = 10;
+            
+            while (attempts < maxAttempts) {
+                try {
+                    await apiClient.get('/health', { timeout: 2000 });
+                    setBackendReady(true);
+                    setCheckingBackend(false);
+                    return;
+                } catch (error) {
+                    attempts++;
+                    if (attempts < maxAttempts) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
+            }
+            
+            // 如果检查失败，仍然允许登录（可能后端已就绪但健康检查失败）
+            setBackendReady(true);
+            setCheckingBackend(false);
+        };
+
+        checkBackend();
+    }, []);
 
     const onFinish = async (values: any) => {
         setLoading(true);
@@ -28,11 +58,22 @@ const Login: React.FC = () => {
 
             login(response.data.access_token);
             message.success('登录成功');
-            navigate('/dashboard');
+            navigate('/app/dashboard');
         } catch (error: any) {
             console.error(error);
-            const msg = error.response?.data?.detail || error.message || '登录失败';
-            message.error(`登录失败: ${msg}`);
+            let msg = '登录失败';
+            
+            if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
+                msg = '无法连接到服务器，请稍后重试';
+            } else if (error.response?.status === 401) {
+                msg = '用户名或密码错误';
+            } else if (error.response?.data?.detail) {
+                msg = error.response.data.detail;
+            } else if (error.message) {
+                msg = error.message;
+            }
+            
+            message.error(msg);
         } finally {
             setLoading(false);
         }
@@ -51,11 +92,28 @@ const Login: React.FC = () => {
                     <div style={{ fontSize: 32, color: '#1890ff', marginBottom: 8 }}>👁️</div>
                     <Title level={3}>玻注预约系统</Title>
                 </div>
+                
+                {checkingBackend && (
+                    <Alert
+                        message="系统启动中"
+                        description={
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Spin indicator={<LoadingOutlined spin />} size="small" />
+                                <span>正在启动后端服务，请稍候...</span>
+                            </div>
+                        }
+                        type="info"
+                        showIcon
+                        style={{ marginBottom: 16 }}
+                    />
+                )}
+                
                 <Form
                     name="login"
                     initialValues={{ remember: true }}
                     onFinish={onFinish}
                     size="large"
+                    disabled={checkingBackend}
                 >
                     <Form.Item
                         name="username"
@@ -72,8 +130,14 @@ const Login: React.FC = () => {
                     </Form.Item>
 
                     <Form.Item>
-                        <Button type="primary" htmlType="submit" style={{ width: '100%' }} loading={loading}>
-                            登录
+                        <Button 
+                            type="primary" 
+                            htmlType="submit" 
+                            style={{ width: '100%' }} 
+                            loading={loading}
+                            disabled={checkingBackend}
+                        >
+                            {checkingBackend ? '系统启动中...' : '登录'}
                         </Button>
                     </Form.Item>
                 </Form>

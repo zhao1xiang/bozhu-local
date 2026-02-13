@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "眼科注射预约系统",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "identifier": "com.eyecare.appointment",
   "build": {
     "frontendDist": "../dist",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "眼科注射预约系统 v2.1.0",
+        "title": "眼科注射预约系统 v2.1.1",
         "width": 1400,
         "height": 900,
         "resizable": true,
@@ -34,8 +34,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": {
-      "../../backend/dist/backend_server.exe": "./"
+    "resources": {},
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "wix": {
+        "language": "zh-CN"
+      }
     }
   }
 }

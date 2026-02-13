@@ -19,10 +19,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-venv/
 .venv/
-env/
-ENV/
 
 # Node
 node_modules/
@@ -38,6 +35,8 @@ backend/dist/
 backend/build/
 frontend/dist/
 frontend/src-tauri/target/
+web-deploy/backend/
+web-deploy/frontend/
 
 # IDE
 .vscode/
