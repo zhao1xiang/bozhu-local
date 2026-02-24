@@ -3,15 +3,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 from database import engine
 from models.user import User
-from security import verify_password, create_access_token, get_password_hash, get_current_user
+from security import verify_password, create_access_token, get_password_hash, get_current_user, get_session
 from datetime import timedelta
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-def get_session():
-    with Session(engine) as session:
-        yield session
 
 class Token(BaseModel):
     access_token: str
