@@ -589,6 +589,9 @@ const Patients: React.FC = () => {
               onBlur={(e) => checkPatientDuplicate('outpatient_number', e.target.value)}
             />
           </Form.Item>
+          <Form.Item name="medical_card_number" label="就诊卡号" >
+            <Input placeholder="请输入就诊卡号" />
+          </Form.Item>
           <Form.Item name="phone" label="联系方式" rules={[{ required: true, message: '请输入联系方式' }]}>
             <Input 
               onBlur={(e) => checkPatientDuplicate('phone', e.target.value)}

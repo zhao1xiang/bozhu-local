@@ -335,7 +335,7 @@ const Appointments: React.FC = () => {
 
     const firstInjectionDate = getNearestInjectionDate(baseDate, weekdays);
 
-    let initialValues: any = {
+    const initialValues: any = {
       appointment_date: firstInjectionDate,
       follow_up_date: firstInjectionDate,
       injection_count: nextInjectionCount,
@@ -486,7 +486,8 @@ const Appointments: React.FC = () => {
 
   const saveAppointment = async () => {
     const values = await form.validateFields();
-
+    console.log('=== saveAppointment START ===');
+    console.log('Form values:', values);
     const commonFields = {
       patient_id: values.patient_id,
       injection_number: values.injection_number,
@@ -497,6 +498,13 @@ const Appointments: React.FC = () => {
       pre_op_vision_left: values.pre_op_vision_left,
       pre_op_vision_right: values.pre_op_vision_right,
       treatment_phase: values.treatment_phase,
+      blood_pressure: values.blood_pressure,
+      blood_sugar: values.blood_sugar,
+      eye_wash_result: values.eye_wash_result,
+      virus_report: values.virus_report,
+      attending_doctor: values.attending_doctor,
+      left_eye_pressure: values.left_eye_pressure,
+      right_eye_pressure: values.right_eye_pressure,
     };
 
     if (editingId) {
@@ -728,11 +736,7 @@ const Appointments: React.FC = () => {
             <Input placeholder="患者姓名" style={{ width: 120 }} />
           </Form.Item>
           <Form.Item name="doctor" label="医生">
-            <Select placeholder="选择医生" style={{ width: 120 }} allowClear>
-              {doctors.map(d => (
-                <Select.Option key={d.id} value={d.value}>{d.label}</Select.Option>
-              ))}
-            </Select>
+            <Select placeholder="选择医生" style={{ width: 120 }} allowClear options={doctors} />
           </Form.Item>
           <Form.Item name="injection_number" label="注药号">
             <Input placeholder="注药号" style={{ width: 120 }} />
@@ -844,10 +848,7 @@ const Appointments: React.FC = () => {
                             name={[name, 'treatment_phase']}
                             label="阶段"
                           >
-                            <Select placeholder="阶段">
-                              <Select.Option value="强化期">强化期</Select.Option>
-                              <Select.Option value="巩固期">巩固期</Select.Option>
-                            </Select>
+                            <Select placeholder="阶段" options={[{ label: '强化期', value: '强化期' }, { label: '巩固期', value: '巩固期' }]} />
                           </Form.Item>
                         </Col>
                         <Col span={3}>
@@ -941,16 +942,26 @@ const Appointments: React.FC = () => {
           </Row>
 
           <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="left_eye_pressure" label="左眼眼压">
+                <Input style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="right_eye_pressure" label="右眼眼压">
+                <Input style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
             <Col span={8}>
               <Form.Item name="drug_name" label="药品名称">
                 <Select
                   placeholder="请选择药品"
                   onChange={(val) => setShowBatchHint(val === '法瑞西单抗')}
-                >
-                  {drugs.map(d => (
-                    <Select.Option key={d.id} value={d.value}>{d.label}</Select.Option>
-                  ))}
-                </Select>
+                  options={drugs}
+                />
               </Form.Item>
             </Col>
             <Col span={8}>
@@ -964,11 +975,20 @@ const Appointments: React.FC = () => {
             </Col>
             <Col span={8}>
               <Form.Item name="cost_type" label="费别">
-                <Select placeholder="选择费别">
-                  {costTypes.map(d => (
-                    <Select.Option key={d.id} value={d.value}>{d.label}</Select.Option>
-                  ))}
-                </Select>
+                <Select placeholder="选择费别" options={costTypes} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="blood_pressure" label="血压">
+                <Input style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="blood_sugar" label="血糖">
+                <Input style={{ width: '100%' }} />
               </Form.Item>
             </Col>
           </Row>
@@ -976,11 +996,34 @@ const Appointments: React.FC = () => {
           <Row gutter={16}>
             <Col span={24}>
               <Form.Item name="doctor" label="注药医生">
-                <Select placeholder="选择医生">
-                  {doctors.map(d => (
-                    <Select.Option key={d.id} value={d.value}>{d.label}</Select.Option>
-                  ))}
-                </Select>
+                <Select placeholder="选择医生" options={doctors} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={24}>
+              <Form.Item name="attending_doctor" label="管床医生">
+                <Select placeholder="选择医生" options={doctors} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={24}>
+              <Form.Item name="eye_wash_result" label="冲眼结果">
+                <Input style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={24}>
+              <Form.Item name="virus_report" label="病毒报告">
+                <Select placeholder="选择病毒报告" options={[
+                  { label: "+", value: "+" },
+                  { label: "-", value: "-" },
+                ]} />
               </Form.Item>
             </Col>
           </Row>
