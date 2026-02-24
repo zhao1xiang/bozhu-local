@@ -1,0 +1,68 @@
+眼科注射预约系统 - Web 端部署包
+=====================================
+
+域名: local-show.microcall.com.cn
+后端端口: 8000 (可自定义)
+
+部署步骤：
+----------
+
+1. 上传整个 web-dist 目录到服务器
+
+2. 部署前端 (Nginx)
+   - 将 frontend 目录内容复制到 Nginx 网站根目录
+   - 配置 Nginx 反向代理 /api/ 到后端
+
+3. 部署后端 (Python)
+   cd backend
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   uvicorn main:app --host 0.0.0.0 --port 8000
+
+4. Nginx 配置示例：
+   server {
+       listen 80;
+       server_name local-show.microcall.com.cn;
+ECHO is off.
+       location / {
+           root /var/www/bozhu/frontend;
+           try_files $uri $uri/ /index.html;
+       }
+ECHO is off.
+       location /api/ {
+           proxy_pass http://127.0.0.1:8000;
+           proxy_set_header Host $host;
+       }
+   }
+
+5. 使用 systemd 管理后端服务 (推荐)
+   创建 /etc/systemd/system/bozhu.service
+   [Unit]
+   Description=Bozhu Backend
+   After=network.target
+ECHO is off.
+   [Service]
+   Type=simple
+   User=root
+   WorkingDirectory=/var/www/bozhu/backend
+   ExecStart=/var/www/bozhu/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+   Restart=always
+ECHO is off.
+   [Install]
+   WantedBy=multi-user.target
+
+   启动服务：
+   sudo systemctl daemon-reload
+   sudo systemctl enable bozhu
+   sudo systemctl start bozhu
+
+默认账号：
+   用户名: admin
+   密码: admin123
+
+注意事项：
+   - 首次登录后请修改密码
+   - 定期备份 database.db 文件
+   - 确保端口 8000 未被占用

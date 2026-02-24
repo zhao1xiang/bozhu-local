@@ -90,7 +90,7 @@ const DailyWork: React.FC = () => {
   };
 
   const handlePrintClick = (record: Appointment) => {
-    navigate(`/print-center?patient_id=${record.patient_id}`);
+    navigate(`/app/print-center?patient_id=${record.patient_id}`);
   };
 
 

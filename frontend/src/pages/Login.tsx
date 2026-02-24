@@ -14,9 +14,31 @@ const Login: React.FC = () => {
     const navigate = useNavigate();
     const { login } = useAuth();
 
-    // 检查后端是否就绪
+    // 检测是否在 Tauri 环境（EXE）或应该跳过检测
+    const isTauri = () => {
+        return window.__TAURI__ !== undefined;
+    };
+
+    const shouldCheckBackend = () => {
+        // 如果设置了环境变量跳过检测
+        if (import.meta.env.VITE_SKIP_SPLASH === 'true') {
+            return false;
+        }
+        // 否则只在 Tauri 环境中检测
+        return isTauri();
+    };
+
+    // 检查后端是否就绪（仅在需要时执行）
     useEffect(() => {
         const checkBackend = async () => {
+            // 如果不需要检测，直接跳过
+            if (!shouldCheckBackend()) {
+                setBackendReady(true);
+                setCheckingBackend(false);
+                return;
+            }
+
+            // EXE 环境才检测后端
             let attempts = 0;
             const maxAttempts = 10;
             

@@ -563,7 +563,7 @@ const Appointments: React.FC = () => {
     try {
       const patientId = await saveAppointment();
       setIsModalOpen(false);
-      navigate(`/print-center?patient_id=${patientId}`);
+      navigate(`/app/print-center?patient_id=${patientId}`);
     } catch (error) {
       console.error(error);
       message.error('保存并跳转失败');
@@ -572,7 +572,7 @@ const Appointments: React.FC = () => {
     }
   };
   const handlePrintClick = (record: Appointment) => {
-    navigate(`/print-center?patient_id=${record.patient_id}`);
+    navigate(`/app/print-center?patient_id=${record.patient_id}`);
   };
 
   const handleCancelAppointment = async (record: Appointment) => {

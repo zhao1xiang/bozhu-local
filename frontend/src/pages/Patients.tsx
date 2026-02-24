@@ -62,7 +62,7 @@ const Patients: React.FC = () => {
           onOk: () => {
             // 跳转到预约页面
             setIsModalOpen(false);
-            navigate(`/appointments?patient_id=${existingPatient.id}`);
+            navigate(`/app/appointments?patient_id=${existingPatient.id}`);
           },
           onCancel: () => {
             // 加载患者信息继续编辑
@@ -193,7 +193,7 @@ const Patients: React.FC = () => {
       }
       setIsModalOpen(false);
       fetchData();
-      navigate(`/appointments?patient_id=${patientId}`);
+      navigate(`/app/appointments?patient_id=${patientId}`);
     } catch (error) {
       console.error(error);
     } finally {
@@ -485,7 +485,7 @@ const Patients: React.FC = () => {
           <Button 
             type="primary" 
             icon={<CalendarOutlined />} 
-            onClick={() => navigate(`/appointments?patient_id=${record.id}`)}
+            onClick={() => navigate(`/app/appointments?patient_id=${record.id}`)}
           >
             预约
           </Button>

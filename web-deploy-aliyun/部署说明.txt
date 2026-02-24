@@ -1,0 +1,123 @@
+眼科注射预约系统 - 阿里云部署包
+================================
+
+📋 部署环境
+--------
+- 域名: local-show.microcall.com.cn
+- 后端端口: 8031
+- 前端路径: /work/local-show/frontend/
+- 后端路径: /work/local-show/backend/
+
+🚀 快速部署步骤
+------------
+
+步骤 1：上传文件
+   将 web-deploy-aliyun.zip 上传到服务器 /tmp/ 目录
+   
+   scp web-deploy-aliyun.zip root@your_server_ip:/tmp/
+
+步骤 2：SSH 登录服务器
+   ssh root@your_server_ip
+
+步骤 3：解压文件
+   cd /work
+   unzip /tmp/web-deploy-aliyun.zip -d local-show
+   cd local-show
+
+步骤 4：启动后端服务
+   chmod +x start-backend.sh
+   sudo bash start-backend.sh
+   
+   这个脚本会自动：
+   ✓ 检查 Python 依赖
+   ✓ 安装缺少的包
+   ✓ 创建 systemd 服务
+   ✓ 启动后端服务
+   ✓ 验证服务状态
+
+步骤 5：验证部署
+   chmod +x check-status.sh
+   sudo bash check-status.sh
+
+步骤 6：访问系统
+   浏览器打开: https://local-show.microcall.com.cn
+   默认账号: admin / admin123
+
+✅ 验证部署成功
+--------------
+1. 检查后端服务状态
+   systemctl status bozhu-backend
+   
+   应该显示: Active: active (running)
+
+2. 测试健康检查
+   curl https://local-show.microcall.com.cn/health
+   
+   应该返回: {"status":"ok","message":"Backend is ready"}
+
+3. 测试本地后端
+   curl http://localhost:8031/api/health
+   
+   应该返回: {"status":"ok","message":"Backend is ready"}
+
+🔧 管理命令
+--------
+查看状态: sudo bash check-status.sh
+启动后端: sudo bash start-backend.sh
+查看日志: sudo tail -f /work/local-show/backend/logs/backend.log
+重启后端: sudo systemctl restart bozhu-backend
+重启 Nginx: sudo systemctl restart nginx
+
+🔍 故障排查
+--------
+问题 1：前端能访问，但登录失败
+  解决：后端服务未启动
+  执行: sudo bash start-backend.sh
+
+问题 2：健康检查失败
+  解决：检查端口占用
+  执行: netstat -tuln | grep 8031
+
+问题 3：Nginx 代理失败
+  解决：检查 Nginx 配置
+  执行: nginx -t
+
+问题 4：Python 依赖错误
+  解决：重新安装依赖
+  执行: cd /work/local-show/backend && pip3 install -r requirements.txt
+
+✨ 特点
+----
+✓ Web 端跳过 Splash 启动检测
+✓ 使用 HTTPS 访问
+✓ 后端端口: 8031
+✓ 前端路径: /work/local-show/frontend/
+✓ 不影响 EXE 桌面版
+✓ 自动创建 systemd 服务
+✓ 开机自启
+
+📁 文件结构
+--------
+/work/local-show/
+├── frontend/          # 前端构建产物
+│   ├── index.html
+│   ├── assets/
+│   └── ...
+├── backend/           # 后端源码
+│   ├── main.py
+│   ├── requirements.txt
+│   ├── routers/
+│   ├── models/
+│   └── logs/         # 日志目录
+├── start-backend.sh   # 启动脚本
+├── check-status.sh    # 状态检查脚本
+└── 部署说明.txt       # 本文件
+
+📞 技术支持
+--------
+后端日志: /work/local-show/backend/logs/backend.log
+Nginx 日志: /var/log/nginx/error.log
+服务状态: systemctl status bozhu-backend
+
+如有问题，请运行检查脚本：
+sudo bash /work/local-show/check-status.sh
