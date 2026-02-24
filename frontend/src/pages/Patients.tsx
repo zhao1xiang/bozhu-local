@@ -614,15 +614,6 @@ const Patients: React.FC = () => {
               <Radio value="经治">经治</Radio>
             </Radio.Group>
           </Form.Item>
-          {patientType === '经治' && (
-            <Form.Item 
-              name="injection_count" 
-              label="已完成针数" 
-              rules={[{ required: true, message: '请输入已完成针数' }]}
-            >
-              <InputNumber min={1} max={50} placeholder="例如：3" />
-            </Form.Item>
-          )}
           <Form.Item label="治疗眼">
             <Space>
               <Form.Item name="left_eye" valuePropName="checked" noStyle>
@@ -633,6 +624,15 @@ const Patients: React.FC = () => {
               </Form.Item>
             </Space>
           </Form.Item>
+          {patientType === '经治' && (
+            <Form.Item 
+              name="injection_count" 
+              label="已完成针数" 
+              rules={[{ required: true, message: '请输入已完成针数' }]}
+            >
+              <InputNumber min={1} max={50} placeholder="例如：3" />
+            </Form.Item>
+          )}
           <Space>
             <Form.Item name="left_vision" label="左眼视力">
               <InputNumber step={0.01} />
