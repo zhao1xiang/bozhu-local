@@ -6,6 +6,7 @@ import uuid
 class PatientBase(SQLModel):
     name: str = Field(index=True)
     outpatient_number: str = Field(index=True, unique=True, description="门诊号")
+    medical_card_number: Optional[str] = Field(default=None, description="就诊卡号")
     phone: str = Field(index=True, unique=True, description="手机号")
     diagnosis: Optional[str] = None
     drug_type: Optional[str] = None

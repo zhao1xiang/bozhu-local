@@ -17,6 +17,13 @@ class AppointmentBase(SQLModel):
     drug_name: Optional[str] = None # 药品名称
     cost_type: Optional[str] = None # 费别 (自费/医保)
     doctor: Optional[str] = None # 注药医生
+    attending_doctor: Optional[str] = Field(default=None, description="管床医生")
+    virus_report: Optional[str] = Field(default=None, description="病毒报告")
+    blood_sugar: Optional[str] = Field(default=None, description="血糖")
+    blood_pressure: Optional[str] = Field(default=None, description="血压")
+    left_eye_pressure: Optional[str] = Field(default=None, description="左眼压")
+    right_eye_pressure: Optional[str] = Field(default=None, description="右眼压")
+    eye_wash_result: Optional[str] = Field(default=None, description="冲眼结果")
     follow_up_date: Optional[date] = None # 复诊时间
     next_follow_up_date: Optional[date] = None # 下次复诊时间
     diagnosis: Optional[str] = None # 诊断
