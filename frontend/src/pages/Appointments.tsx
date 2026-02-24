@@ -360,6 +360,9 @@ const Appointments: React.FC = () => {
       if (patient) {
         initialValues.drug_name = patient.drug_type;
         initialValues.eye = patient.left_eye && patient.right_eye ? '双眼' : (patient.left_eye ? '左眼' : (patient.right_eye ? '右眼' : undefined));
+        // 带入患者的视力信息
+        initialValues.pre_op_vision_left = patient.left_vision;
+        initialValues.pre_op_vision_right = patient.right_vision;
         
         setShowBatchHint(patient.drug_type === '法瑞西单抗');
       } else {
@@ -463,6 +466,9 @@ const Appointments: React.FC = () => {
         follow_up_date: firstInjectionDate,
         doctor: lastDoctor,
         cost_type: lastCostType,
+        // 带入患者的视力信息
+        pre_op_vision_left: patient.left_vision,
+        pre_op_vision_right: patient.right_vision,
         // 重置预约列表为单个预约
         appointment_list: [{
           appointment_date: firstInjectionDate,
