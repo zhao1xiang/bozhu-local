@@ -9,6 +9,7 @@ from database import engine
 
 app = FastAPI()
 
+# 开发环境允许所有来源，生产环境使用白名单
 origins = [
     "http://localhost:5173",
     "http://localhost:3000",
@@ -23,8 +24,8 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=["*"],  # 开发环境允许所有来源
+    allow_credentials=False,  # 允许所有来源时必须设为False
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
