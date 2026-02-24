@@ -27,6 +27,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 @app.on_event("startup")
@@ -72,6 +74,7 @@ def fix_admin():
 def read_root():
     return {"message": "Welcome to Eye Injection Appointment System API"}
 
+@app.options("/api/health")
 @app.get("/api/health")
 def health_check():
     """健康检查端点，用于前端检测后端是否就绪"""
