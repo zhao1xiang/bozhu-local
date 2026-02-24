@@ -13,7 +13,12 @@ SECRET_KEY = "supersecretkey"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30 * 24 * 60 # 30 days
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["bcrypt"], 
+    deprecated="auto",
+    bcrypt__default_rounds=12,
+    bcrypt__default_ident="2b"
+)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
 def verify_password(plain_password, hashed_password):
@@ -23,11 +28,12 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    from datetime import datetime, timezone
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt

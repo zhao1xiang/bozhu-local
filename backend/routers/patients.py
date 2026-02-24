@@ -37,12 +37,20 @@ def create_patient(patient: PatientBase, session: Session = Depends(get_session)
 
 @router.get("/", response_model=List[Patient])
 def read_patients(skip: int = 0, limit: int = 100, session: Session = Depends(get_session)):
-    patients = session.exec(
-        select(Patient)
-        .order_by(Patient.created_at.desc())
-        .offset(skip).limit(limit)
-    ).all()
-    return patients
+    try:
+        patients = session.exec(
+            select(Patient)
+            .order_by(Patient.created_at.desc())
+            .offset(skip).limit(limit)
+        ).all()
+        return patients
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching patients: {str(e)}"
+        )
 
 @router.get("/{patient_id}", response_model=Patient)
 def read_patient(patient_id: str, session: Session = Depends(get_session)):

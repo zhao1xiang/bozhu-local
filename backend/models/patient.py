@@ -1,6 +1,6 @@
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 class PatientBase(SQLModel):
@@ -20,8 +20,8 @@ class PatientBase(SQLModel):
 
 class Patient(PatientBase, table=True):
     id: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     
     appointments: List["Appointment"] = Relationship(back_populates="patient")
     # schemes relationship removed as schemes are now global templates

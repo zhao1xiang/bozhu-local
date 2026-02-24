@@ -1,6 +1,6 @@
 from typing import Optional
 from sqlmodel import SQLModel, Field, Relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 class PrintRecordBase(SQLModel):
@@ -12,7 +12,7 @@ class PrintRecordBase(SQLModel):
 class PrintRecord(PrintRecordBase, table=True):
     __tablename__ = "print_records"
     id: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
-    print_date: datetime = Field(default_factory=datetime.utcnow)
+    print_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     
     patient: "Patient" = Relationship(back_populates="print_records")
     appointment: Optional["Appointment"] = Relationship(back_populates="print_records")

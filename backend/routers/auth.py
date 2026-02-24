@@ -19,19 +19,37 @@ class PasswordChange(BaseModel):
 
 @router.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
-    user = session.exec(select(User).where(User.username == form_data.username)).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
+    try:
+        user = session.exec(select(User).where(User.username == form_data.username)).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # 验证密码
+        if not verify_password(form_data.password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        token_expires = timedelta(minutes=30 * 24 * 60) # 30 days
+        access_token = create_access_token(
+            data={"sub": user.username}, expires_delta=token_expires
         )
-    
-    token_expires = timedelta(minutes=30 * 24 * 60) # 30 days
-    access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+        return {"access_token": access_token, "token_type": "bearer"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login error: {str(e)}"
+        )
 
 @router.post("/change-password")
 async def change_password(
