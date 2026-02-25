@@ -149,6 +149,13 @@ const Patients: React.FC = () => {
 
   const savePatient = async () => {
     const values = await form.validateFields();
+    
+    const { left_eye, right_eye } = values;
+    if (!left_eye && !right_eye) {
+      message.error('请至少选择一个治疗眼');
+      throw new Error('请至少选择一个治疗眼');
+    }
+    
     try {
       if (editingPatient) {
         await apiClient.put(`/patients/${editingPatient.id}`, values);
@@ -617,7 +624,10 @@ const Patients: React.FC = () => {
               <Radio value="经治">经治</Radio>
             </Radio.Group>
           </Form.Item>
-          <Form.Item label="治疗眼">
+          <Form.Item 
+            label="治疗眼" 
+            required
+          >
             <Space>
               <Form.Item name="left_eye" valuePropName="checked" noStyle>
                 <Checkbox>左眼</Checkbox>
