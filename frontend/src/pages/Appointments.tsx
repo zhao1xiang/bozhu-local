@@ -58,6 +58,19 @@ const Appointments: React.FC = () => {
     return baseDate;
   };
 
+  // 根据针次计算间隔月数
+  const getIntervalMonths = (injectionCount: number): number => {
+    if (injectionCount <= 4) {
+      return 1; // 前4针每月一次
+    } else if (injectionCount === 5) {
+      return 2; // 第5针隔2个月
+    } else if (injectionCount === 6) {
+      return 3; // 第6针隔3个月
+    } else {
+      return 4; // 第7针及之后都隔4个月
+    }
+  };
+
   const startBatchGeneration = async () => {
     console.log('startBatchGeneration - injectionWeekdays:', injectionWeekdays);
     
@@ -93,9 +106,11 @@ const Appointments: React.FC = () => {
           maxInjectionCount = Math.max(maxInjectionCount, maxInjectionAppointment.injection_count);
         }
         
-        // 从最后一次预约日期+1个月开始
+        // 从最后一次预约日期开始，根据针次计算下一次的间隔
         if (maxInjectionAppointment.appointment_date) {
-          baseDate = dayjs(maxInjectionAppointment.appointment_date).add(1, 'month');
+          const lastInjectionCount = maxInjectionAppointment.injection_count || 0;
+          const intervalMonths = getIntervalMonths(lastInjectionCount + 1);
+          baseDate = dayjs(maxInjectionAppointment.appointment_date).add(intervalMonths, 'month');
         }
       }
       
@@ -111,16 +126,22 @@ const Appointments: React.FC = () => {
 
     // 生成4次预约
     const batchList = [];
+    let currentDate = baseDate;
+    
     for (let i = 0; i < 4; i++) {
-      const monthBase = i === 0 ? baseDate : baseDate.add(i, 'month');
-      const date = getNearestInjectionDate(monthBase, injectionWeekdays);
       const injectionCount = startInjectionCount + i;
+      const date = getNearestInjectionDate(currentDate, injectionWeekdays);
+      
       batchList.push({
         appointment_date: date,
         follow_up_date: date,
         injection_count: injectionCount,
         treatment_phase: injectionCount > 4 ? '巩固期' : '强化期'
       });
+      
+      // 计算下一针的间隔
+      const intervalMonths = getIntervalMonths(injectionCount + 1);
+      currentDate = date.add(intervalMonths, 'month');
     }
     
     console.log('Generated batch list:', batchList);
@@ -306,10 +327,25 @@ const Appointments: React.FC = () => {
             maxInjectionCount = Math.max(maxInjectionCount, maxInjectionAppointment.injection_count);
           }
           
-          // 从最后一次预约日期+1个月开始
+          // 从最后一次预约日期开始，根据针次计算下一次的间隔
           if (maxInjectionAppointment.appointment_date) {
-            baseDate = dayjs(maxInjectionAppointment.appointment_date).add(1, 'month');
-            console.log('Patient has history, baseDate:', baseDate.format('YYYY-MM-DD'));
+            const lastInjectionCount = maxInjectionAppointment.injection_count || 0;
+            let intervalMonths = 1;
+            
+            // 计算下一针的间隔
+            const nextInjectionCount = lastInjectionCount + 1;
+            if (nextInjectionCount <= 4) {
+              intervalMonths = 1;
+            } else if (nextInjectionCount === 5) {
+              intervalMonths = 2;
+            } else if (nextInjectionCount === 6) {
+              intervalMonths = 3;
+            } else {
+              intervalMonths = 4;
+            }
+            
+            baseDate = dayjs(maxInjectionAppointment.appointment_date).add(intervalMonths, 'month');
+            console.log('Patient has history, baseDate:', baseDate.format('YYYY-MM-DD'), 'intervalMonths:', intervalMonths);
           }
           
           // 延续上次的医生和费别
@@ -431,9 +467,24 @@ const Appointments: React.FC = () => {
             maxInjectionCount = Math.max(maxInjectionCount, maxInjectionAppointment.injection_count);
           }
           
-          // 从最后一次预约日期+1个月开始
+          // 从最后一次预约日期开始，根据针次计算下一次的间隔
           if (maxInjectionAppointment.appointment_date) {
-            baseDate = dayjs(maxInjectionAppointment.appointment_date).add(1, 'month');
+            const lastInjectionCount = maxInjectionAppointment.injection_count || 0;
+            let intervalMonths = 1;
+            
+            // 计算下一针的间隔
+            const nextInjectionCount = lastInjectionCount + 1;
+            if (nextInjectionCount <= 4) {
+              intervalMonths = 1;
+            } else if (nextInjectionCount === 5) {
+              intervalMonths = 2;
+            } else if (nextInjectionCount === 6) {
+              intervalMonths = 3;
+            } else {
+              intervalMonths = 4;
+            }
+            
+            baseDate = dayjs(maxInjectionAppointment.appointment_date).add(intervalMonths, 'month');
           }
           
           // 延续上次的医生和费别
@@ -867,14 +918,42 @@ const Appointments: React.FC = () => {
                       <Button type="dashed" onClick={() => {
                         const currentList = form.getFieldValue('appointment_list') || [];
                         const lastItem = currentList[currentList.length - 1];
-                        const base = lastItem ? dayjs(lastItem.appointment_date).add(1, 'month') : dayjs();
-                        const nextDate = getNearestInjectionDate(base, injectionWeekdays);
-                        add({
-                          appointment_date: nextDate,
-                          follow_up_date: nextDate,
-                          injection_count: lastItem ? (lastItem.injection_count || 0) + 1 : 1,
-                          treatment_phase: lastItem ? lastItem.treatment_phase : '强化期'
-                        });
+                        
+                        if (lastItem) {
+                          const lastInjectionCount = lastItem.injection_count || 0;
+                          const nextInjectionCount = lastInjectionCount + 1;
+                          
+                          // 根据下一针的针次计算间隔
+                          let intervalMonths = 1;
+                          if (nextInjectionCount <= 4) {
+                            intervalMonths = 1;
+                          } else if (nextInjectionCount === 5) {
+                            intervalMonths = 2;
+                          } else if (nextInjectionCount === 6) {
+                            intervalMonths = 3;
+                          } else {
+                            intervalMonths = 4;
+                          }
+                          
+                          const base = dayjs(lastItem.appointment_date).add(intervalMonths, 'month');
+                          const nextDate = getNearestInjectionDate(base, injectionWeekdays);
+                          
+                          add({
+                            appointment_date: nextDate,
+                            follow_up_date: nextDate,
+                            injection_count: nextInjectionCount,
+                            treatment_phase: nextInjectionCount > 4 ? '巩固期' : '强化期'
+                          });
+                        } else {
+                          const base = dayjs();
+                          const nextDate = getNearestInjectionDate(base, injectionWeekdays);
+                          add({
+                            appointment_date: nextDate,
+                            follow_up_date: nextDate,
+                            injection_count: 1,
+                            treatment_phase: '强化期'
+                          });
+                        }
                       }} block icon={<PlusOutlined />}>
                         添加玻注预约日期
                       </Button>

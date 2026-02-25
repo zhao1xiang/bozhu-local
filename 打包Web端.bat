@@ -20,7 +20,7 @@ REM 清理缓存
 if exist "dist" rmdir /s /q "dist"
 if exist ".vite" rmdir /s /q ".vite"
 REM 设置环境变量
-set VITE_API_URL=http://%DOMAIN%
+set VITE_API_URL=https://%DOMAIN%/api
 set VITE_SKIP_SPLASH=true
 set NODE_OPTIONS=--max-old-space-size=4096
 call npm run build

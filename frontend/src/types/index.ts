@@ -2,6 +2,7 @@ export interface Patient {
   id: string;
   name: string;
   outpatient_number?: string;
+  medical_card_number?: string;
   phone?: string;
   diagnosis?: string;
   drug_type?: string;
@@ -19,6 +20,7 @@ export interface Patient {
 export interface PatientBase {
   name: string;
   outpatient_number?: string;
+  medical_card_number?: string;
   phone?: string;
   diagnosis?: string;
   drug_type?: string;
@@ -44,6 +46,13 @@ export interface Appointment {
   drug_name?: string;
   cost_type?: string;
   doctor?: string;
+  attending_doctor?: string;
+  virus_report?: string;
+  blood_sugar?: string;
+  blood_pressure?: string;
+  left_eye_pressure?: string;
+  right_eye_pressure?: string;
+  eye_wash_result?: string;
   next_follow_up_date?: string;
   follow_up_date?: string;
   diagnosis?: string;

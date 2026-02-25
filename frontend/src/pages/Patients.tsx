@@ -262,10 +262,12 @@ const Patients: React.FC = () => {
     const countLeft = (list: Appointment[]) =>
       list.filter((a) => a.eye === '左眼' || a.eye === '双眼').length;
 
-    const PATIENT_HEADERS = ['姓名', '门诊号', '联系方式', '患者类型', '针数(右眼)', '针数(左眼)', '眼底病诊断'];
+    const PATIENT_HEADERS = ['姓名', '门诊号', '就诊卡号', '联系方式', '患者类型', '针数(右眼)', '针数(左眼)', '眼底病诊断'];
     const TREATMENT_SUB_HEADERS = [
       '治疗日期', '注药号', '治疗眼', '治疗药物', '费别', '治疗阶段',
-      '针数（右眼）', '针数（左眼）', '裸眼视力（右眼）', '裸眼视力（左眼）', '复诊日期', '注药医生'
+      '针数（右眼）', '针数（左眼）', '裸眼视力（右眼）', '裸眼视力（左眼）', 
+      '左眼压', '右眼压', '血压', '血糖', '冲眼结果', '病毒报告',
+      '复诊日期', '注药医生', '管床医生'
     ];
     const SUB_COLS = TREATMENT_SUB_HEADERS.length;
 
@@ -346,6 +348,7 @@ const Patients: React.FC = () => {
       const rowData: (string | number)[] = [
         p.name ?? '',
         p.outpatient_number ?? '',
+        p.medical_card_number ?? '',
         p.phone ?? '',
         p.patient_type ?? '',
         p.right_eye ? patientCountRight : '',
@@ -374,8 +377,15 @@ const Patients: React.FC = () => {
           countLeftVal,
           a.pre_op_vision_right ?? '',
           a.pre_op_vision_left ?? '',
+          a.left_eye_pressure ?? '',
+          a.right_eye_pressure ?? '',
+          a.blood_pressure ?? '',
+          a.blood_sugar ?? '',
+          a.eye_wash_result ?? '',
+          a.virus_report ?? '',
           a.follow_up_date ? dayjs(a.follow_up_date).format('YYYY-MM-DD') : '',
-          a.doctor ?? ''
+          a.doctor ?? '',
+          a.attending_doctor ?? ''
         );
       }
 
@@ -386,14 +396,17 @@ const Patients: React.FC = () => {
       });
     }
 
-    const colWidths: number[] = [10, 12, 14, 10, 10, 10, 18];
+    const colWidths: number[] = [10, 12, 12, 14, 10, 10, 10, 18];
     for (let n = 0; n < maxTreatments; n++) {
       for (let i = 0; i < SUB_COLS; i++) {
         if (i === 6 || i === 7 || i === 8 || i === 9) {
           // 针数（右/左）+ 裸眼视力（右/左）
           colWidths.push(18);
-        } else if (i === 0 || i === 10) {
+        } else if (i === 0 || i === 16) {
           // 治疗日期 / 复诊日期
+          colWidths.push(12);
+        } else if (i === 10 || i === 11 || i === 12 || i === 13 || i === 14 || i === 15) {
+          // 左眼压、右眼压、血压、血糖、冲眼结果、病毒报告
           colWidths.push(12);
         } else {
           // 其它列
