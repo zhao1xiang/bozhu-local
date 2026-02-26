@@ -286,6 +286,14 @@ const Appointments: React.FC = () => {
       }
     };
     init();
+  }, []);
+
+  // 监听URL参数变化，当patient_id变化时打开新建预约弹窗
+  useEffect(() => {
+    const patientId = searchParams.get('patient_id');
+    if (patientId && patients.length > 0 && injectionWeekdays.length > 0) {
+      handleAdd(patientId, patients, injectionWeekdays);
+    }
   }, [searchParams]);
 
 

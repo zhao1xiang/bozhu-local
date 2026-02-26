@@ -74,67 +74,144 @@ const PrintCenter: React.FC = () => {
 
   const handlePrint = () => {
     const printArea = document.getElementById('print-area');
-    if (!printArea) return;
-
-    // Clone the node to manipulate/clean it if necessary, though innerHTML is usually enough
-    // We want to ensure the print window uses the exact same styles as the preview
-
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>打印注射卡 - ${selectedPatient?.name}</title>
-            <style>
-              @page {
-                size: A5;
-                margin: 0;
-              }
-              body {
-                margin: 0;
-                padding: 0;
-                font-family: "SimSun", "Songti SC", serif;
-                display: flex;
-                justify-content: center;
-                align-items: flex-start;
-              }
-              /* Use the same container logic as preview */
-              .print-container {
-                position: relative !important;
-                width: 100% !important; /* Fill the A5 page width */
-                max-width: 148mm;
-                /* Height auto to maintain aspect ratio same as preview */
-                height: auto !important; 
-              }
-              img {
-                width: 100%;
-                display: block;
-              }
-              .overlay-text {
-                position: absolute;
-                font-family: inherit;
-                font-weight: bold;
-                /* Font size adjustment for print sharpness if needed, 
-                   but percentages will be relative to container */
-              }
-            </style>
-          </head>
-          <body>
-            <!-- We wrap inner content in a way that matches the structure -->
-            ${printArea.querySelector('.print-container')?.outerHTML || ''}
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.focus();
-      // Wait for image to load before printing
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 500);
+    if (!printArea) {
+      message.error('打印区域未找到，请刷新页面重试');
+      return;
     }
-  };
+
+    try {
+      message.info('正在准备打印...');
+      
+      // 添加打印样式 - 保持字体大小一致
+      const style = document.createElement('style');
+      style.id = 'print-style';
+      style.textContent = `
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
+          
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          html, body {
+            width: 210mm;
+            height: 297mm;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+          }
+          
+          body * {
+            visibility: hidden;
+          }
+          
+          #print-area, #print-area * {
+            visibility: visible;
+          }
+          
+          #print-area {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            page-break-inside: avoid;
+            page-break-after: avoid;
+          }
+          
+          .print-container {
+            width: 194mm !important;
+            max-width: 194mm !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            background: white !important;
+            page-break-inside: avoid;
+            page-break-after: avoid;
+            position: relative;
+          }
+          
+          .print-container img {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            display: block;
+            page-break-inside: avoid;
+          }
+          
+          .overlay-text {
+            position: absolute;
+            font-family: "SimSun", "Songti SC", serif;
+            font-weight: bold;
+          }
+          
+          /* 调整字体大小以匹配打印缩放比例 */
+          /* 原始容器宽度 420px，打印宽度 194mm ≈ 733px */
+          /* 缩放比例：733 / 420 ≈ 1.745 */
+          .overlay-text.name {
+            font-size: 22.7px !important; /* 13px * 1.745 */
+          }
+          
+          .overlay-text.phone {
+            font-size: 22.7px !important; /* 13px * 1.745 */
+          }
+          
+          .overlay-text.checkmark {
+            font-size: 24.4px !important; /* 14px * 1.745 */
+          }
+          
+          .overlay-text.diagnosis {
+            font-size: 20.9px !important; /* 12px * 1.745 */
+          }
+          
+          .overlay-text.drug {
+            font-size: 20.9px !important; /* 12px * 1.745 */
+          }
+          
+          .overlay-text.vision {
+            font-size: 19.2px !important; /* 11px * 1.745 */
+          }
+          
+          .overlay-text.time-1,
+          .overlay-text.time-2,
+          .overlay-text.time-3,
+          .overlay-text.time-4,
+          .overlay-text.time-5,
+          .overlay-text.time-6,
+          .overlay-text.time-7,
+          .overlay-text.time-8,
+          .overlay-text.time-9 {
+            font-size: 20.9px !important; /* 12px * 1.745 */
+          }
+        }
+      `;
+      document.head.appendChild(style);
+      
+      // 执行打印
+      window.print();
+      
+      // 打印完成后移除样式
+      setTimeout(() => {
+        const styleEl = document.getElementById('print-style');
+        if (styleEl) {
+          styleEl.remove();
+        }
+      }, 1000);
+    } catch (error) {
+      console.error('打印过程中发生错误:', error);
+      message.error('打印失败: ' + (error as Error).message);
+    }
+  }
 
   return (
     <div>

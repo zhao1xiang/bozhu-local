@@ -109,17 +109,17 @@ def get_distributions(session: Session = Depends(get_session)):
     # 1. Drug
     drug_query = select(Appointment.drug_name, func.count(Appointment.id)).group_by(Appointment.drug_name)
     drug_counts = session.exec(drug_query).all()
-    drugs = [{"name": r[0] or "Unknown", "value": r[1]} for r in drug_counts]
+    drugs = [{"name": r[0] or "未填写", "value": r[1]} for r in drug_counts]
     
-    # 2. Eye
-    eye_query = select(Appointment.eye, func.count(Appointment.id)).group_by(Appointment.eye)
+    # 2. Eye - 只统计有眼别数据的记录
+    eye_query = select(Appointment.eye, func.count(Appointment.id)).where(Appointment.eye.isnot(None)).group_by(Appointment.eye)
     eye_counts = session.exec(eye_query).all()
-    eyes = [{"name": r[0] or "Unknown", "value": r[1]} for r in eye_counts]
+    eyes = [{"name": r[0], "value": r[1]} for r in eye_counts]
 
     # 3. Disease (from Patient model)
     disease_query = select(Patient.diagnosis, func.count(Patient.id)).group_by(Patient.diagnosis)
     disease_counts = session.exec(disease_query).all()
-    diseases = [{"name": r[0] or "Unknown", "value": r[1]} for r in disease_counts]
+    diseases = [{"name": r[0] or "未填写", "value": r[1]} for r in disease_counts]
     
     return {"drugs": drugs, "eyes": eyes, "diseases": diseases}
 
