@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, DatePicker, Table, Button, Tag, message, Space, Modal, Tabs, Form, Select, Input, Switch } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import { CheckOutlined, CloseOutlined, PrinterOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined, PrinterOutlined, EditOutlined } from '@ant-design/icons';
 import { Appointment, Patient } from '@/types';
 import { apiClient } from '@/api/client';
 import { useNavigate } from 'react-router-dom';
@@ -23,6 +23,11 @@ const DailyWork: React.FC = () => {
   const [callResultModalOpen, setCallResultModalOpen] = useState(false);
   const [currentReminder, setCurrentReminder] = useState<Appointment | null>(null);
   const [callForm] = Form.useForm();
+
+  // Reschedule state
+  const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
+  const [currentReschedule, setCurrentReschedule] = useState<Appointment | null>(null);
+  const [rescheduleForm] = Form.useForm();
 
   const fetchData = async () => {
     setLoading(true);
@@ -120,6 +125,45 @@ const DailyWork: React.FC = () => {
     }
   };
 
+  const openRescheduleModal = (record: Appointment) => {
+    setCurrentReschedule(record);
+    rescheduleForm.setFieldsValue({
+      appointment_date: record.appointment_date ? dayjs(record.appointment_date) : null,
+      follow_up_date: record.follow_up_date ? dayjs(record.follow_up_date) : null,
+    });
+    setRescheduleModalOpen(true);
+  };
+
+  const handleRescheduleSubmit = async () => {
+    try {
+      const values = await rescheduleForm.validateFields();
+      if (currentReschedule) {
+        const payload = {
+          patient_id: currentReschedule.patient_id,
+          appointment_date: values.appointment_date ? values.appointment_date.format('YYYY-MM-DD') : currentReschedule.appointment_date,
+          follow_up_date: values.follow_up_date ? values.follow_up_date.format('YYYY-MM-DD') : currentReschedule.follow_up_date,
+          status: currentReschedule.status,
+          injection_number: currentReschedule.injection_number,
+          injection_count: currentReschedule.injection_count,
+          eye: currentReschedule.eye,
+          drug_name: currentReschedule.drug_name,
+          cost_type: currentReschedule.cost_type,
+          doctor: currentReschedule.doctor,
+          treatment_phase: currentReschedule.treatment_phase,
+          notes: currentReschedule.notes
+        };
+
+        await apiClient.patch(`/appointments/${currentReschedule.id}`, payload);
+        message.success('预约时间修改成功');
+        setRescheduleModalOpen(false);
+        fetchData(); // Refresh list
+      }
+    } catch (error) {
+      console.error(error);
+      message.error('修改失败');
+    }
+  };
+
   const columns = [
     {
       title: '玻注日期',
@@ -187,6 +231,13 @@ const DailyWork: React.FC = () => {
             onClick={() => handlePrintClick(record)}
           >
             打印
+          </Button>
+          <Button
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => openRescheduleModal(record)}
+          >
+            修改预约时间
           </Button>
         </Space>
       )
@@ -304,6 +355,22 @@ const DailyWork: React.FC = () => {
           </Form.Item>
           <Form.Item name="notes" label="备注">
             <Input.TextArea rows={3} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="修改预约时间"
+        open={rescheduleModalOpen}
+        onOk={handleRescheduleSubmit}
+        onCancel={() => setRescheduleModalOpen(false)}
+      >
+        <Form form={rescheduleForm} layout="vertical">
+          <Form.Item name="appointment_date" label="玻注日期" rules={[{ required: true, message: '请选择玻注日期' }]}>
+            <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item name="follow_up_date" label="复诊日期">
+            <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
           </Form.Item>
         </Form>
       </Modal>
