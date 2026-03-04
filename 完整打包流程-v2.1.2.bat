@@ -3,13 +3,31 @@ chcp 65001 >nul
 echo ========================================
 echo   完整打包流程 v2.1.2
 echo   (包含自动数据库升级功能)
+echo   使用 Python 3.11
 echo ========================================
+echo.
+
+REM 设置 Python 3.11 路径
+set PYTHON_PATH=E:\python3.11\python.exe
+set PIP_PATH=E:\python3.11\Scripts\pip.exe
+set PYINSTALLER_PATH=E:\python3.11\Scripts\pyinstaller.exe
+
+echo 检查 Python 3.11...
+if not exist "%PYTHON_PATH%" (
+    echo ✗ 未找到 Python 3.11: %PYTHON_PATH%
+    echo 请修改脚本中的 PYTHON_PATH 变量
+    pause
+    exit /b 1
+)
+
+echo ✓ Python 路径: %PYTHON_PATH%
+%PYTHON_PATH% --version
 echo.
 
 echo [1/6] 打包后端...
 cd backend
 echo 正在打包后端...
-python -m PyInstaller build_backend.spec --clean
+"%PYINSTALLER_PATH%" build_backend.spec --clean
 if not exist "dist\backend_server.exe" (
     echo ✗ 后端打包失败
     cd ..
@@ -161,13 +179,13 @@ echo     echo ✓ WebView2 已安装 ^(系统级^)
 echo ^)
 echo echo.
 echo echo [3] 检查端口占用...
-echo netstat -ano ^| findstr ":8000" ^>nul
+echo netstat -ano ^| findstr ":8030" ^>nul
 echo if errorlevel 1 ^(
-echo     echo ✓ 端口 8000 未被占用
+echo     echo ✓ 端口 8030 未被占用
 echo ^) else ^(
-echo     echo ✗ 端口 8000 已被占用
+echo     echo ✗ 端口 8030 已被占用
 echo     echo 占用进程:
-echo     netstat -ano ^| findstr ":8000"
+echo     netstat -ano ^| findstr ":8030"
 echo ^)
 echo echo.
 echo echo [4] 查看最近的日志...
@@ -249,7 +267,7 @@ echo.
 echo 【系统要求】
 echo   - Windows 10/11
 echo   - WebView2 运行时（首次启动会自动安装）
-echo   - 端口 8000 未被占用
+echo   - 端口 8030 未被占用
 echo.
 echo 【故障排除】
 echo   问题：升级后无法启动

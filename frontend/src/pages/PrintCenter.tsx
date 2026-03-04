@@ -13,15 +13,18 @@ const PrintCenter: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const selectedPatient = patients.find(p => p.id === selectedPatientId);
+  // 安全地查找选中的患者，防止 null 错误
+  const selectedPatient = patients?.find(p => p.id === selectedPatientId);
 
   const fetchPatients = async () => {
     try {
       const response = await apiClient.get<Patient[]>('/patients');
-      setPatients(response.data);
+      // 确保返回的是数组
+      setPatients(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error(error);
       message.error('获取患者列表失败');
+      setPatients([]); // 出错时设置为空数组
     }
   };
 
@@ -31,14 +34,17 @@ const PrintCenter: React.FC = () => {
       const response = await apiClient.get<Appointment[]>('/appointments', {
         params: { patient_id: patientId, limit: 100 }
       });
+      // 确保返回的是数组
+      const data = Array.isArray(response.data) ? response.data : [];
       // Sort by injection_count
-      const sorted = response.data
+      const sorted = data
         .filter(a => a.patient_id === patientId)
         .sort((a, b) => (a.injection_count || 0) - (b.injection_count || 0));
       setAppointments(sorted);
     } catch (error) {
       console.error(error);
       message.error('获取预约列表失败');
+      setAppointments([]); // 出错时设置为空数组
     } finally {
       setLoading(false);
     }
@@ -266,7 +272,8 @@ const PrintCenter: React.FC = () => {
                 justifyContent: 'center',
                 background: '#f0f0f0',
                 padding: 20,
-                borderRadius: 8
+                borderRadius: 8,
+                minHeight: 600
               }}
             >
               <div
@@ -274,11 +281,32 @@ const PrintCenter: React.FC = () => {
                 style={{
                   position: 'relative',
                   width: '420px',
+                  maxWidth: '420px',
                   background: '#fff',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                  overflow: 'hidden'
                 }}
               >
-                <img src="/print-template.png" alt="打印模板" style={{ width: '100%' }} />
+                <img 
+                  src="/print-template.png" 
+                  alt="打印模板" 
+                  style={{ 
+                    width: '100%',
+                    display: 'block',
+                    height: 'auto'
+                  }}
+                  onError={(e) => {
+                    console.error('打印模板图片加载失败');
+                    e.currentTarget.style.display = 'none';
+                    const parent = e.currentTarget.parentElement;
+                    if (parent) {
+                      const errorDiv = document.createElement('div');
+                      errorDiv.style.cssText = 'padding: 40px; text-align: center; color: #999;';
+                      errorDiv.innerHTML = '⚠️ 打印模板图片加载失败<br/>请检查 print-template.png 文件是否存在';
+                      parent.appendChild(errorDiv);
+                    }
+                  }}
+                />
 
                 {/* Patient Info Overlay - Row 1: 姓名、联系方式、左眼右眼 */}
                 <span className="overlay-text name" style={{ position: 'absolute', top: '20%', left: '16%', fontSize: '13px', fontWeight: 'bold' }}>

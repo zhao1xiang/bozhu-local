@@ -111,8 +111,33 @@ const Login: React.FC = () => {
         }}>
             <Card style={{ width: 400, boxShadow: '0 4px 8px rgba(0,0,0,0.1)' }}>
                 <div style={{ textAlign: 'center', marginBottom: 24 }}>
-                    <div style={{ fontSize: 32, color: '#1890ff', marginBottom: 8 }}>👁️</div>
-                    <Title level={3}>玻注预约系统</Title>
+                    {/* Logo - 优先使用图片，如果加载失败则使用 emoji */}
+                    <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'center', 
+                        alignItems: 'center',
+                        marginBottom: 8 
+                    }}>
+                        <img 
+                            src="/logo.png" 
+                            alt="Logo" 
+                            style={{ 
+                                width: 64, 
+                                height: 64,
+                                objectFit: 'contain',
+                                display: 'block'
+                            }}
+                            onError={(e) => {
+                                // 如果图片加载失败，隐藏图片并显示 emoji
+                                e.currentTarget.style.display = 'none';
+                                const emojiDiv = document.createElement('div');
+                                emojiDiv.style.cssText = 'font-size: 48px; color: #1890ff; line-height: 1;';
+                                emojiDiv.textContent = '👁️';
+                                e.currentTarget.parentElement?.appendChild(emojiDiv);
+                            }}
+                        />
+                    </div>
+                    <Title level={3} style={{ margin: 0 }}>玻注预约系统</Title>
                 </div>
                 
                 {checkingBackend && (

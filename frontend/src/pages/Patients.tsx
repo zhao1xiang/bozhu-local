@@ -87,9 +87,9 @@ const Patients: React.FC = () => {
         apiClient.get<DataDictionaryItem[]>('/data-dictionary', { params: { category: 'drug' } }),
         apiClient.get<DataDictionaryItem[]>('/data-dictionary', { params: { category: 'diagnosis' } }),
       ]);
-      setPatients(patientsRes.data);
-      setDrugs(drugsRes.data.filter(d => d.is_active));
-      setDiagnoses(diagnosesRes.data.filter(d => d.is_active));
+      setPatients(Array.isArray(patientsRes.data) ? patientsRes.data : []);
+      setDrugs(Array.isArray(drugsRes.data) ? drugsRes.data.filter(d => d.is_active) : []);
+      setDiagnoses(Array.isArray(diagnosesRes.data) ? diagnosesRes.data.filter(d => d.is_active) : []);
     } catch (error) {
       console.error(error);
       message.error('获取患者数据失败');
@@ -485,9 +485,9 @@ const Patients: React.FC = () => {
       key: 'eye',
       filteredValue: eyeFilter ? [eyeFilter] : null,
       onFilter: (value, record) => {
-        if (value === 'left') return record.left_eye;
-        if (value === 'right') return record.right_eye;
-        if (value === 'both') return record.left_eye && record.right_eye;
+        if (value === 'left') return !!record.left_eye;
+        if (value === 'right') return !!record.right_eye;
+        if (value === 'both') return !!(record.left_eye && record.right_eye);
         return true;
       },
       render: (_, record) => (
