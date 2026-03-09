@@ -12,6 +12,7 @@ const PrintCenter: React.FC = () => {
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(false);
+  const [printPhoneNumber, setPrintPhoneNumber] = useState<string>('');
 
   // 安全地查找选中的患者，防止 null 错误
   const selectedPatient = patients?.find(p => p.id === selectedPatientId);
@@ -52,6 +53,16 @@ const PrintCenter: React.FC = () => {
 
   useEffect(() => {
     fetchPatients();
+    // 获取打印电话号码配置
+    const fetchPrintPhone = async () => {
+      try {
+        const response = await apiClient.get('/system-settings/print_phone_number');
+        setPrintPhoneNumber(response.data.value || '');
+      } catch (error) {
+        console.error('获取打印电话配置失败:', error);
+      }
+    };
+    fetchPrintPhone();
   }, []);
 
   useEffect(() => {
@@ -368,6 +379,18 @@ const PrintCenter: React.FC = () => {
                 </span>
                 <span className="overlay-text time-9" style={{ position: 'absolute', top: '73%', left: '39%', fontSize: '12px', fontWeight: 'bold' }}>
                   {formatDate(getAppointmentByCount(9)?.appointment_date)}
+                </span>
+
+                {/* 联系电话 - 显示在左下角"本院复诊提醒电话："后面 */}
+                <span style={{ 
+                  position: 'absolute', 
+                  bottom: '1.8%',  // 再往下调整一点
+                  left: '32%',     // 在"本院复诊提醒电话："后面
+                  fontSize: '13px', 
+                  fontWeight: 'bold', 
+                  color: '#000'
+                }}>
+                  {printPhoneNumber}
                 </span>
               </div>
             </div>

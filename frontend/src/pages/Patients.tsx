@@ -39,6 +39,9 @@ const Patients: React.FC = () => {
   
   // 监听患者类型变化
   const patientType = Form.useWatch('patient_type', form);
+  // 监听诊断和药物选择
+  const diagnosis = Form.useWatch('diagnosis', form);
+  const drugType = Form.useWatch('drug_type', form);
 
   // 检查患者是否重复
   const checkPatientDuplicate = async (field: 'outpatient_number' | 'phone', value: string) => {
@@ -122,6 +125,32 @@ const Patients: React.FC = () => {
     setEditingPatient(record);
     form.setFieldsValue(record);
     setIsModalOpen(true);
+  };
+
+  const handleDeletePatient = (record: Patient) => {
+    Modal.confirm({
+      title: '确认删除患者',
+      content: (
+        <div>
+          <p>确定要删除患者 <strong>{record.name}</strong> 吗？</p>
+          <p style={{ color: '#ff4d4f' }}>此操作将同时删除该患者的所有预约记录！</p>
+          <p style={{ color: '#999', fontSize: '12px' }}>注：删除后数据仍保留在数据库中，不会真正删除。</p>
+        </div>
+      ),
+      okText: '确认删除',
+      cancelText: '取消',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          await apiClient.delete(`/patients/${record.id}`);
+          message.success('患者及相关预约已删除');
+          fetchData();
+        } catch (error) {
+          console.error(error);
+          message.error('删除失败');
+        }
+      }
+    });
   };
 
   const handleApplyScheme = (record: Patient) => {
@@ -522,6 +551,12 @@ const Patients: React.FC = () => {
           >
             治疗进度
           </Button>
+          <Button
+            danger
+            onClick={() => handleDeletePatient(record)}
+          >
+            删除
+          </Button>
         </Space>
       ),
     },
@@ -605,13 +640,10 @@ const Patients: React.FC = () => {
           <Form.Item name="name" label="姓名" rules={[{ required: true, message: '请输入姓名' }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="outpatient_number" label="门诊号" rules={[{ required: true, message: '请输入门诊号' }]}>
-            <Input 
-              placeholder="请输入门诊号" 
-              onBlur={(e) => checkPatientDuplicate('outpatient_number', e.target.value)}
-            />
+          <Form.Item name="outpatient_number" label="门诊号">
+            <Input placeholder="请输入门诊号" />
           </Form.Item>
-          <Form.Item name="medical_card_number" label="就诊卡号" >
+          <Form.Item name="medical_card_number" label="就诊卡号">
             <Input placeholder="请输入就诊卡号" />
           </Form.Item>
           <Form.Item name="phone" label="联系方式" rules={[{ required: true, message: '请输入联系方式' }]}>
@@ -626,6 +658,11 @@ const Patients: React.FC = () => {
               ))}
             </Select>
           </Form.Item>
+          {diagnosis === '其他' && (
+            <Form.Item name="diagnosis_other" label="诊断说明" rules={[{ required: true, message: '请输入诊断说明' }]}>
+              <Input placeholder="请输入具体诊断" />
+            </Form.Item>
+          )}
           <Form.Item name="drug_type" label="治疗药物">
             <Select placeholder="请选择治疗药物">
               {drugs.map(d => (
@@ -633,6 +670,11 @@ const Patients: React.FC = () => {
               ))}
             </Select>
           </Form.Item>
+          {drugType === '其他' && (
+            <Form.Item name="drug_type_other" label="药物说明" rules={[{ required: true, message: '请输入药物说明' }]}>
+              <Input placeholder="请输入具体药物名称" />
+            </Form.Item>
+          )}
           <Form.Item name="patient_type" label="患者类型">
             <Radio.Group>
               <Radio value="初治">初治</Radio>
@@ -661,14 +703,28 @@ const Patients: React.FC = () => {
               <InputNumber min={1} max={50} placeholder="例如：3" />
             </Form.Item>
           )}
-          <Space>
-            <Form.Item name="left_vision" label="左眼视力">
-              <InputNumber step={0.01} />
-            </Form.Item>
-            <Form.Item name="right_vision" label="右眼视力">
-              <InputNumber step={0.01} />
-            </Form.Item>
-          </Space>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 8, fontWeight: 500 }}>裸眼视力</div>
+            <Space>
+              <Form.Item name="left_vision" label="左眼" style={{ marginBottom: 0 }}>
+                <InputNumber step={0.01} placeholder="例: 0.5" />
+              </Form.Item>
+              <Form.Item name="right_vision" label="右眼" style={{ marginBottom: 0 }}>
+                <InputNumber step={0.01} placeholder="例: 0.5" />
+              </Form.Item>
+            </Space>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 8, fontWeight: 500 }}>矫正视力</div>
+            <Space>
+              <Form.Item name="left_vision_corrected" label="左眼" style={{ marginBottom: 0 }}>
+                <InputNumber step={0.01} placeholder="例: 0.8" />
+              </Form.Item>
+              <Form.Item name="right_vision_corrected" label="右眼" style={{ marginBottom: 0 }}>
+                <InputNumber step={0.01} placeholder="例: 0.8" />
+              </Form.Item>
+            </Space>
+          </div>
         </Form>
       </Modal>
 

@@ -16,19 +16,36 @@ def get_session():
 def get_dashboard_stats(session: Session = Depends(get_session)):
     today = date.today()
     
-    # 1. Total Patients
-    total_patients = session.exec(select(func.count(Patient.id))).one()
+    # 1. Total Patients (exclude deleted)
+    total_patients = session.exec(
+        select(func.count(Patient.id)).where(Patient.is_deleted == False)
+    ).one()
     
-    # 2. Total Injections (Completed Appointments)
-    total_injections = session.exec(select(func.count(Appointment.id)).where(Appointment.status == 'completed')).one()
+    # 2. Total Injections (Completed Appointments, exclude deleted)
+    total_injections = session.exec(
+        select(func.count(Appointment.id)).where(
+            Appointment.status == 'completed',
+            Appointment.is_deleted == False
+        )
+    ).one()
     
-    # 3. Today's Appointments
-    today_appointments = session.exec(select(func.count(Appointment.id)).where(Appointment.appointment_date == today)).one()
+    # 3. Today's Appointments (exclude deleted)
+    today_appointments = session.exec(
+        select(func.count(Appointment.id)).where(
+            Appointment.appointment_date == today,
+            Appointment.is_deleted == False
+        )
+    ).one()
     
     # 4. Pending Reminders (Follow-ups due today or earlier that are not called)
     # This is a bit complex, let's just count follow-ups due in next 3 days for now as a "Pending" metric
     # Or count "Due today"
-    due_today = session.exec(select(func.count(Appointment.id)).where(Appointment.next_follow_up_date == today)).one()
+    due_today = session.exec(
+        select(func.count(Appointment.id)).where(
+            Appointment.next_follow_up_date == today,
+            Appointment.is_deleted == False
+        )
+    ).one()
     
     return {
         "total_patients": total_patients,
@@ -44,6 +61,7 @@ def get_injection_trend(dimension: str = "month", session: Session = Depends(get
     start_date = today - timedelta(days=180)
     
     query = select(Appointment).where(
+        Appointment.is_deleted == False,
         Appointment.appointment_date >= start_date,
         Appointment.status == 'completed'
     ).order_by(Appointment.appointment_date)
@@ -69,8 +87,9 @@ def get_reinjection_rate(session: Session = Depends(get_session)):
     
     results = {}
     for phase in ["强化期", "巩固期"]:
-        # Total patients who had at least one injection in this phase
+        # Total patients who had at least one injection in this phase (exclude deleted)
         total_p_query = select(func.count(func.distinct(Appointment.patient_id))).where(
+            Appointment.is_deleted == False,
             Appointment.treatment_phase == phase,
             Appointment.status == 'completed'
         )
@@ -92,6 +111,7 @@ def get_reinjection_rate(session: Session = Depends(get_session)):
         # If we count all patients who ever had an injection, how many have a future one?
         
         sub_query = select(func.count(func.distinct(Appointment.patient_id))).where(
+            Appointment.is_deleted == False,
             Appointment.treatment_phase == phase,
             Appointment.status == 'scheduled'
         )
@@ -106,27 +126,37 @@ def get_reinjection_rate(session: Session = Depends(get_session)):
 
 @router.get("/charts/distribution")
 def get_distributions(session: Session = Depends(get_session)):
-    # 1. Drug
-    drug_query = select(Appointment.drug_name, func.count(Appointment.id)).group_by(Appointment.drug_name)
+    # 1. Drug (exclude deleted appointments)
+    drug_query = select(Appointment.drug_name, func.count(Appointment.id)).where(
+        Appointment.is_deleted == False
+    ).group_by(Appointment.drug_name)
     drug_counts = session.exec(drug_query).all()
-    drugs = [{"name": r[0] or "Unknown", "value": r[1]} for r in drug_counts]
+    drugs = [{"name": r[0] or "未填写", "value": r[1]} for r in drug_counts]
     
-    # 2. Eye
-    eye_query = select(Appointment.eye, func.count(Appointment.id)).group_by(Appointment.eye)
+    # 2. Eye - 只统计有眼别数据的记录 (exclude deleted appointments)
+    eye_query = select(Appointment.eye, func.count(Appointment.id)).where(
+        Appointment.is_deleted == False,
+        Appointment.eye.isnot(None)
+    ).group_by(Appointment.eye)
     eye_counts = session.exec(eye_query).all()
-    eyes = [{"name": r[0] or "Unknown", "value": r[1]} for r in eye_counts]
+    eyes = [{"name": r[0], "value": r[1]} for r in eye_counts]
 
-    # 3. Disease (from Patient model)
-    disease_query = select(Patient.diagnosis, func.count(Patient.id)).group_by(Patient.diagnosis)
+    # 3. Disease (from Patient model, exclude deleted patients)
+    disease_query = select(Patient.diagnosis, func.count(Patient.id)).where(
+        Patient.is_deleted == False
+    ).group_by(Patient.diagnosis)
     disease_counts = session.exec(disease_query).all()
-    diseases = [{"name": r[0] or "Unknown", "value": r[1]} for r in disease_counts]
+    diseases = [{"name": r[0] or "未填写", "value": r[1]} for r in disease_counts]
     
     return {"drugs": drugs, "eyes": eyes, "diseases": diseases}
 
 @router.get("/charts/doctors")
 def get_doctor_workload(session: Session = Depends(get_session)):
-    # Top doctors by injection count (All time)
-    query = select(Appointment.doctor, func.count(Appointment.id)).where(Appointment.status == 'completed').group_by(Appointment.doctor).order_by(func.count(Appointment.id).desc()).limit(10)
+    # Top doctors by injection count (All time, exclude deleted appointments)
+    query = select(Appointment.doctor, func.count(Appointment.id)).where(
+        Appointment.is_deleted == False,
+        Appointment.status == 'completed'
+    ).group_by(Appointment.doctor).order_by(func.count(Appointment.id).desc()).limit(10)
     counts = session.exec(query).all()
     
     result = [{"name": r[0] or "Unknown", "value": r[1]} for r in counts]

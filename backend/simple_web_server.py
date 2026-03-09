@@ -70,10 +70,38 @@ def open_browser_delayed(url, delay=3):
     def open_browser():
         time.sleep(delay)
         try:
+            # 在打开浏览器前，先检查服务器是否真的启动了
+            import socket
+            max_retries = 10
+            retry_count = 0
+            
+            while retry_count < max_retries:
+                try:
+                    # 尝试连接服务器
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(1)
+                    result = sock.connect_ex(('127.0.0.1', int(url.split(':')[-1])))
+                    sock.close()
+                    
+                    if result == 0:
+                        # 服务器已启动，打开浏览器
+                        webbrowser.open(url)
+                        print(f"✓ 浏览器已打开: {url}")
+                        return
+                    else:
+                        # 服务器还没启动，继续等待
+                        retry_count += 1
+                        time.sleep(1)
+                except Exception:
+                    retry_count += 1
+                    time.sleep(1)
+            
+            # 超时后仍然尝试打开浏览器
+            print(f"⚠ 服务器启动检测超时，仍然尝试打开浏览器: {url}")
             webbrowser.open(url)
-            print(f"✓ 浏览器已打开: {url}")
+            
         except Exception as e:
-            print(f"打开浏览器失败: {e}")
+            print(f"✗ 打开浏览器失败: {e}")
             print(f"请手动打开浏览器访问: {url}")
     
     threading.Thread(target=open_browser, daemon=True).start()
@@ -152,25 +180,43 @@ def main():
         
         url = f"http://{host}:{port}"
         
-        logger.info(f"🚀 启动服务器: {url}")
+        logger.info(f"🚀 准备启动服务器: {url}")
         logger.info(f"📁 前端目录: {frontend_dir}")
         logger.info(f"📊 数据库: database.db")
-        logger.info("⏳ 浏览器将在 3 秒后自动打开...")
+        logger.info("⏳ 等待服务器启动完成后自动打开浏览器...")
+        logger.info("   （如果浏览器未自动打开，请手动访问上述地址）")
         logger.info("提示：按 Ctrl+C 可以停止服务器")
         logger.info("=" * 60)
         
-        # 延迟打开浏览器
-        open_browser_delayed(url, delay=3)
+        # 延迟打开浏览器（会自动检测服务器是否启动）
+        open_browser_delayed(url, delay=5)
         
         # 启动服务器
-        uvicorn.run(
-            app,  # 直接传入 app 对象
-            host=host,
-            port=port,
-            log_level="info",
-            access_log=True,  # 启用访问日志
-            reload=False
-        )
+        logger.info(">>> 正在启动后端服务...")
+        logger.info(f">>> 监听地址: {host}:{port}")
+        
+        try:
+            # 创建 uvicorn 配置
+            import uvicorn.config
+            import uvicorn.server
+            
+            config = uvicorn.Config(
+                app=app,
+                host=host,
+                port=port,
+                log_level="info",
+                access_log=True,
+                loop="asyncio"  # 明确指定事件循环
+            )
+            
+            server = uvicorn.Server(config)
+            logger.info(">>> uvicorn Server 已创建，准备启动...")
+            server.run()
+            
+        except Exception as e:
+            logger.error(f">>> 后端服务启动失败: {e}")
+            logger.error(traceback.format_exc())
+            raise
         
     except KeyboardInterrupt:
         logger.info("=" * 60)
@@ -188,4 +234,8 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
+    # PyInstaller 打包时需要调用 freeze_support()
+    import multiprocessing
+    multiprocessing.freeze_support()
+    
     main()

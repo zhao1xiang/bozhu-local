@@ -9,12 +9,14 @@ class AppointmentBase(SQLModel):
     time_slot: Optional[str] = None
     status: str = Field(default="scheduled", index=True)
     notes: Optional[str] = None
+    is_deleted: bool = Field(default=False, index=True, description="软删除标记")
     
     # New fields
     injection_number: Optional[str] = None # 注药号
     injection_count: Optional[int] = None # 注药次数
     eye: Optional[str] = None # 眼别 (左眼/右眼)
     drug_name: Optional[str] = None # 药品名称
+    drug_name_other: Optional[str] = Field(default=None, description="药品其他说明")
     cost_type: Optional[str] = None # 费别 (自费/医保)
     doctor: Optional[str] = None # 注药医生
     attending_doctor: Optional[str] = Field(default=None, description="管床医生")

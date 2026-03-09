@@ -182,9 +182,11 @@ const GeneralSettings: React.FC = () => {
   const fetchSetting = async () => {
     setLoading(true);
     try {
-      const [reminderResp, weekdayResp] = await Promise.all([
+      const [reminderResp, weekdayResp, intervalResp, phoneResp] = await Promise.all([
         apiClient.get('/system-settings/reminder_days_advance'),
         apiClient.get('/system-settings/injection_weekday'),
+        apiClient.get('/system-settings/injection_interval_first_4'),
+        apiClient.get('/system-settings/print_phone_number'),
       ]);
 
       form.setFieldsValue({
@@ -193,12 +195,16 @@ const GeneralSettings: React.FC = () => {
         injection_weekday: weekdayResp.data.value
           ? String(weekdayResp.data.value).split(',').filter(Boolean)
           : [],
+        injection_interval_first_4: Number(intervalResp.data.value) || 30,
+        print_phone_number: phoneResp.data.value || '',
       });
     } catch (error) {
       console.error(error);
       form.setFieldsValue({
         reminder_days_advance: 3,
         injection_weekday: ['1'], // 默认周一
+        injection_interval_first_4: 30,
+        print_phone_number: '',
       });
     } finally {
       setLoading(false);
@@ -218,6 +224,14 @@ const GeneralSettings: React.FC = () => {
             ? values.injection_weekday.join(',')
             : values.injection_weekday?.toString() || '',
           description: '玻注日（1-7 表示周一到周日，可多选，逗号分隔）'
+        }),
+        apiClient.put('/system-settings/injection_interval_first_4', {
+          value: values.injection_interval_first_4.toString(),
+          description: '前4针注射间隔（天）'
+        }),
+        apiClient.put('/system-settings/print_phone_number', {
+          value: values.print_phone_number,
+          description: '打印页面显示的联系电话'
         })
       ]);
 
@@ -267,6 +281,23 @@ const GeneralSettings: React.FC = () => {
           />
         </Form.Item>
 
+        <Form.Item
+          name="injection_interval_first_4"
+          label="前4针注射间隔"
+          extra="设置前4针注射的间隔天数（第5针及以后按固定规则：2个月、3个月、4个月）"
+          rules={[{ required: true, message: '请输入间隔天数' }]}
+        >
+          <InputNumber min={1} max={365} style={{ width: 200 }} suffix="天" />
+        </Form.Item>
+
+        <Form.Item
+          name="print_phone_number"
+          label="打印联系电话"
+          extra="打印页面显示的联系电话号码（可选）"
+          rules={[{ required: false }]}
+        >
+          <Input style={{ width: 200 }} placeholder="例如：13608685716" />
+        </Form.Item>
 
         <Form.Item>
           <Button type="primary" htmlType="submit" loading={loading}>

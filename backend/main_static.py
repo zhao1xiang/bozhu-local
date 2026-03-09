@@ -112,6 +112,11 @@ def on_startup():
             migrations = {
                 'patient': [
                     ('medical_card_number', 'VARCHAR', '就诊卡号'),
+                    ('diagnosis_other', 'TEXT', '诊断其他说明'),
+                    ('drug_type_other', 'TEXT', '药物其他说明'),
+                    ('left_vision_corrected', 'REAL', '左眼矫正视力'),
+                    ('right_vision_corrected', 'REAL', '右眼矫正视力'),
+                    ('is_deleted', 'BOOLEAN DEFAULT 0', '软删除标记'),
                 ],
                 'appointment': [
                     ('attending_doctor', 'VARCHAR', '管床医生'),
@@ -121,6 +126,8 @@ def on_startup():
                     ('left_eye_pressure', 'VARCHAR', '左眼压'),
                     ('right_eye_pressure', 'VARCHAR', '右眼压'),
                     ('eye_wash_result', 'VARCHAR', '冲眼结果'),
+                    ('drug_name_other', 'TEXT', '药品其他说明'),
+                    ('is_deleted', 'BOOLEAN DEFAULT 0', '软删除标记'),
                 ]
             }
             
@@ -246,6 +253,30 @@ def on_startup():
             logger.info("✓ 默认用户已创建 (admin/admin)")
         else:
             logger.info("✓ 管理员用户已存在")
+    
+    # ==================== 4. 初始化系统配置 ====================
+    logger.info("=" * 60)
+    logger.info("检查系统配置...")
+    logger.info("=" * 60)
+    
+    from models.system_setting import SystemSetting
+    
+    with Session(engine) as session:
+        # 定义默认配置
+        default_settings = [
+            ('injection_interval_first_4', '30', '前4针注射间隔（天）'),
+            ('print_phone_number', '', '打印页面显示的联系电话'),
+        ]
+        
+        for key, value, description in default_settings:
+            setting = session.exec(select(SystemSetting).where(SystemSetting.key == key)).first()
+            if not setting:
+                new_setting = SystemSetting(key=key, value=value, description=description)
+                session.add(new_setting)
+                logger.info(f"  ✓ 添加配置: {key} = {value}")
+        
+        session.commit()
+        logger.info("✓ 系统配置检查完成")
     
     logger.info("✅ 系统启动完成")
     logger.info("")

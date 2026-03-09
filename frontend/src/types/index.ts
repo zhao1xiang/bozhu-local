@@ -5,9 +5,13 @@ export interface Patient {
   medical_card_number?: string;
   phone?: string;
   diagnosis?: string;
+  diagnosis_other?: string;
   drug_type?: string;
+  drug_type_other?: string;
   left_vision?: number;
   right_vision?: number;
+  left_vision_corrected?: number;
+  right_vision_corrected?: number;
   left_eye: boolean;
   right_eye: boolean;
   status: string;
@@ -23,9 +27,13 @@ export interface PatientBase {
   medical_card_number?: string;
   phone?: string;
   diagnosis?: string;
+  diagnosis_other?: string;
   drug_type?: string;
+  drug_type_other?: string;
   left_vision?: number;
   right_vision?: number;
+  left_vision_corrected?: number;
+  right_vision_corrected?: number;
   left_eye: boolean;
   right_eye: boolean;
   status: string;
@@ -44,6 +52,7 @@ export interface Appointment {
   injection_count?: number;
   eye?: string;
   drug_name?: string;
+  drug_name_other?: string;
   cost_type?: string;
   doctor?: string;
   attending_doctor?: string;
@@ -111,4 +120,17 @@ export interface DataDictionaryItem {
   sort_order: number;
   is_active: boolean;
   created_at: string;
+}
+
+export interface SystemSetting {
+  id: number;
+  key: string;
+  value: string;
+  description?: string;
+  updated_at: string;
+}
+
+export interface SystemSettingUpdate {
+  value?: string;
+  description?: string;
 }

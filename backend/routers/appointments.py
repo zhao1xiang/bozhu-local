@@ -43,7 +43,7 @@ def read_appointments(
 ):
     try:
         from models.patient import Patient
-        query = select(Appointment)
+        query = select(Appointment).where(Appointment.is_deleted == False)
         
         if patient_id:
             query = query.where(Appointment.patient_id == patient_id)
@@ -96,9 +96,21 @@ def update_appointment(appointment_id: str, appointment_update: AppointmentBase,
 
 @router.delete("/{appointment_id}")
 def delete_appointment(appointment_id: str, session: Session = Depends(get_session)):
+    """软删除预约"""
     appointment = session.get(Appointment, appointment_id)
     if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    session.delete(appointment)
+    
+    if appointment.is_deleted:
+        raise HTTPException(status_code=400, detail="Appointment already deleted")
+    
+    # 软删除
+    appointment.is_deleted = True
+    session.add(appointment)
     session.commit()
-    return {"ok": True}
+    
+    return {
+        "message": "Appointment deleted successfully",
+        "appointment_id": appointment_id
+    }
+

@@ -21,6 +21,8 @@ const Appointments: React.FC = () => {
   const [showBatchHint, setShowBatchHint] = useState(false);
   // 玻注日配置（1-7 表示周一到周日），默认周一
   const [injectionWeekdays, setInjectionWeekdays] = useState<string[]>(['1']);
+  // 前4针注射间隔（天），默认30天
+  const [injectionIntervalFirst4, setInjectionIntervalFirst4] = useState<number>(30);
 
   // 根据系统配置的玻注日，从给定日期开始向后寻找最近的一个玻注日
   const getNearestInjectionDate = (baseDate: Dayjs, weekdays: string[]): Dayjs => {
@@ -58,16 +60,21 @@ const Appointments: React.FC = () => {
     return baseDate;
   };
 
-  // 根据针次计算间隔月数
-  const getIntervalMonths = (injectionCount: number): number => {
+  // 根据针次计算下一次预约日期
+  const getNextAppointmentDate = (baseDate: Dayjs, injectionCount: number, intervalDays: number = injectionIntervalFirst4): Dayjs => {
     if (injectionCount <= 4) {
-      return 1; // 前4针每月一次
+      // 前4针使用配置的天数间隔
+      console.log(`Calculating next date for injection ${injectionCount}: adding ${intervalDays} days`);
+      return baseDate.add(intervalDays, 'day');
     } else if (injectionCount === 5) {
-      return 2; // 第5针隔2个月
+      // 第5针隔2个月
+      return baseDate.add(2, 'month');
     } else if (injectionCount === 6) {
-      return 3; // 第6针隔3个月
+      // 第6针隔3个月
+      return baseDate.add(3, 'month');
     } else {
-      return 4; // 第7针及之后都隔4个月
+      // 第7针及之后都隔4个月
+      return baseDate.add(4, 'month');
     }
   };
 
@@ -109,8 +116,8 @@ const Appointments: React.FC = () => {
         // 从最后一次预约日期开始，根据针次计算下一次的间隔
         if (maxInjectionAppointment.appointment_date) {
           const lastInjectionCount = maxInjectionAppointment.injection_count || 0;
-          const intervalMonths = getIntervalMonths(lastInjectionCount + 1);
-          baseDate = dayjs(maxInjectionAppointment.appointment_date).add(intervalMonths, 'month');
+          const nextInjectionCount = lastInjectionCount + 1;
+          baseDate = getNextAppointmentDate(dayjs(maxInjectionAppointment.appointment_date), nextInjectionCount, injectionIntervalFirst4);
         }
       }
       
@@ -139,9 +146,8 @@ const Appointments: React.FC = () => {
         treatment_phase: injectionCount > 4 ? '巩固期' : '强化期'
       });
       
-      // 计算下一针的间隔
-      const intervalMonths = getIntervalMonths(injectionCount + 1);
-      currentDate = date.add(intervalMonths, 'month');
+      // 计算下一针的日期
+      currentDate = getNextAppointmentDate(date, injectionCount + 1, injectionIntervalFirst4);
     }
     
     console.log('Generated batch list:', batchList);
@@ -262,10 +268,14 @@ const Appointments: React.FC = () => {
       ]);
       const patientData = results[1] as Patient[];
 
-      // 单独获取玻注日配置
+      // 单独获取玻注日配置和注射间隔配置
       try {
-        const response = await apiClient.get('/system-settings/injection_weekday');
-        const rawValue = response.data?.value ?? '';
+        const [weekdayResponse, intervalResponse] = await Promise.all([
+          apiClient.get('/system-settings/injection_weekday'),
+          apiClient.get('/system-settings/injection_interval_first_4')
+        ]);
+        
+        const rawValue = weekdayResponse.data?.value ?? '';
         const list = rawValue
           ? String(rawValue)
               .split(',')
@@ -274,15 +284,20 @@ const Appointments: React.FC = () => {
           : [];
         const weekdaysConfig = list.length ? list : ['1'];
         setInjectionWeekdays(weekdaysConfig);
+        
+        // 设置前4针注射间隔
+        const intervalValue = parseInt(intervalResponse.data?.value ?? '30', 10);
+        setInjectionIntervalFirst4(isNaN(intervalValue) ? 30 : intervalValue);
 
         // 如果URL中有patient_id参数，使用获取到的配置
         const patientId = searchParams.get('patient_id');
         if (patientId) {
-          handleAdd(patientId, patientData, weekdaysConfig);
+          handleAdd(patientId, patientData, weekdaysConfig, intervalValue);
         }
       } catch (error) {
         console.error(error);
         setInjectionWeekdays(['1']);
+        setInjectionIntervalFirst4(30);
       }
     };
     init();
@@ -292,12 +307,12 @@ const Appointments: React.FC = () => {
   useEffect(() => {
     const patientId = searchParams.get('patient_id');
     if (patientId && patients.length > 0 && injectionWeekdays.length > 0) {
-      handleAdd(patientId, patients, injectionWeekdays);
+      handleAdd(patientId, patients, injectionWeekdays, injectionIntervalFirst4);
     }
-  }, [searchParams]);
+  }, [searchParams, patients, injectionWeekdays, injectionIntervalFirst4]);
 
 
-  const handleAdd = async (preSelectedPatientId?: string, patientsList?: Patient[], weekdaysConfig?: string[]) => {
+  const handleAdd = async (preSelectedPatientId?: string, patientsList?: Patient[], weekdaysConfig?: string[], intervalDaysConfig?: number) => {
     form.resetFields();
     const now = dayjs();
     let baseDate = now;
@@ -308,7 +323,8 @@ const Appointments: React.FC = () => {
 
     // 使用传入的配置或当前状态
     const weekdays = weekdaysConfig || injectionWeekdays;
-    console.log('handleAdd - using weekdays:', weekdays);
+    const intervalDays = intervalDaysConfig !== undefined ? intervalDaysConfig : injectionIntervalFirst4;
+    console.log('handleAdd - using weekdays:', weekdays, 'intervalDays:', intervalDays);
 
     // 如果指定了患者，尝试获取该患者的最后一次预约信息
     if (preSelectedPatientId) {
@@ -338,22 +354,10 @@ const Appointments: React.FC = () => {
           // 从最后一次预约日期开始，根据针次计算下一次的间隔
           if (maxInjectionAppointment.appointment_date) {
             const lastInjectionCount = maxInjectionAppointment.injection_count || 0;
-            let intervalMonths = 1;
-            
-            // 计算下一针的间隔
             const nextInjectionCount = lastInjectionCount + 1;
-            if (nextInjectionCount <= 4) {
-              intervalMonths = 1;
-            } else if (nextInjectionCount === 5) {
-              intervalMonths = 2;
-            } else if (nextInjectionCount === 6) {
-              intervalMonths = 3;
-            } else {
-              intervalMonths = 4;
-            }
             
-            baseDate = dayjs(maxInjectionAppointment.appointment_date).add(intervalMonths, 'month');
-            console.log('Patient has history, baseDate:', baseDate.format('YYYY-MM-DD'), 'intervalMonths:', intervalMonths);
+            baseDate = getNextAppointmentDate(dayjs(maxInjectionAppointment.appointment_date), nextInjectionCount, intervalDays);
+            console.log('Patient has history, baseDate:', baseDate.format('YYYY-MM-DD'), 'nextInjectionCount:', nextInjectionCount);
           }
           
           // 延续上次的医生和费别
@@ -478,21 +482,9 @@ const Appointments: React.FC = () => {
           // 从最后一次预约日期开始，根据针次计算下一次的间隔
           if (maxInjectionAppointment.appointment_date) {
             const lastInjectionCount = maxInjectionAppointment.injection_count || 0;
-            let intervalMonths = 1;
-            
-            // 计算下一针的间隔
             const nextInjectionCount = lastInjectionCount + 1;
-            if (nextInjectionCount <= 4) {
-              intervalMonths = 1;
-            } else if (nextInjectionCount === 5) {
-              intervalMonths = 2;
-            } else if (nextInjectionCount === 6) {
-              intervalMonths = 3;
-            } else {
-              intervalMonths = 4;
-            }
             
-            baseDate = dayjs(maxInjectionAppointment.appointment_date).add(intervalMonths, 'month');
+            baseDate = getNextAppointmentDate(dayjs(maxInjectionAppointment.appointment_date), nextInjectionCount, injectionIntervalFirst4);
           }
           
           // 延续上次的医生和费别
@@ -673,6 +665,33 @@ const Appointments: React.FC = () => {
     });
   };
 
+  const handleDeleteAppointment = (record: Appointment) => {
+    Modal.confirm({
+      title: '确认删除预约',
+      content: (
+        <div>
+          <p>确定要删除患者 <strong>{patients.find(p => p.id === record.patient_id)?.name || '未知'}</strong> 的预约吗？</p>
+          <p style={{ color: '#999', fontSize: '12px' }}>注：删除后数据仍保留在数据库中，不会真正删除。</p>
+        </div>
+      ),
+      okText: '确认删除',
+      cancelText: '取消',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          await apiClient.delete(`/appointments/${record.id}`);
+          message.success('预约已删除');
+          // 刷新列表，保持当前筛选条件
+          const searchValues = searchForm.getFieldsValue();
+          fetchAppointments(searchValues);
+        } catch (error) {
+          console.error(error);
+          message.error('删除失败');
+        }
+      }
+    });
+  };
+
   const columns: ColumnsType<Appointment> = [
     {
       title: '玻注日期',
@@ -769,16 +788,13 @@ const Appointments: React.FC = () => {
               编辑
             </Button>
           )}
-          {record.status !== 'completed' && record.status !== 'cancelled' && (
-            <Button
-              type="link"
-              danger
-              icon={<CloseOutlined />}
-              onClick={() => handleCancelAppointment(record)}
-            >
-              取消
-            </Button>
-          )}
+          <Button
+            type="link"
+            danger
+            onClick={() => handleDeleteAppointment(record)}
+          >
+            删除
+          </Button>
         </Space>
       ),
     },
@@ -931,19 +947,8 @@ const Appointments: React.FC = () => {
                           const lastInjectionCount = lastItem.injection_count || 0;
                           const nextInjectionCount = lastInjectionCount + 1;
                           
-                          // 根据下一针的针次计算间隔
-                          let intervalMonths = 1;
-                          if (nextInjectionCount <= 4) {
-                            intervalMonths = 1;
-                          } else if (nextInjectionCount === 5) {
-                            intervalMonths = 2;
-                          } else if (nextInjectionCount === 6) {
-                            intervalMonths = 3;
-                          } else {
-                            intervalMonths = 4;
-                          }
-                          
-                          const base = dayjs(lastItem.appointment_date).add(intervalMonths, 'month');
+                          // 根据下一针的针次计算日期
+                          const base = getNextAppointmentDate(dayjs(lastItem.appointment_date), nextInjectionCount, injectionIntervalFirst4);
                           const nextDate = getNearestInjectionDate(base, injectionWeekdays);
                           
                           add({
@@ -1015,18 +1020,38 @@ const Appointments: React.FC = () => {
             </>
           )}
 
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="pre_op_vision_left" label="左眼视力">
-                <InputNumber step={0.01} style={{ width: '100%' }} placeholder="例: 0.5" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="pre_op_vision_right" label="右眼视力">
-                <InputNumber step={0.01} style={{ width: '100%' }} placeholder="例: 0.5" />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Card size="small" title="视力" style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ marginBottom: 8, fontWeight: 500, color: '#666' }}>裸眼视力</div>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item name="pre_op_vision_left" label="左眼" style={{ marginBottom: 0 }}>
+                    <InputNumber step={0.01} style={{ width: '100%' }} placeholder="例: 0.5" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="pre_op_vision_right" label="右眼" style={{ marginBottom: 0 }}>
+                    <InputNumber step={0.01} style={{ width: '100%' }} placeholder="例: 0.5" />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </div>
+            <div>
+              <div style={{ marginBottom: 8, fontWeight: 500, color: '#666' }}>矫正视力</div>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item name="pre_op_vision_left_corrected" label="左眼" style={{ marginBottom: 0 }}>
+                    <InputNumber step={0.01} style={{ width: '100%' }} placeholder="例: 0.8" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="pre_op_vision_right_corrected" label="右眼" style={{ marginBottom: 0 }}>
+                    <InputNumber step={0.01} style={{ width: '100%' }} placeholder="例: 0.8" />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </div>
+          </Card>
 
           <Row gutter={16}>
             <Col span={12}>
@@ -1051,6 +1076,13 @@ const Appointments: React.FC = () => {
                 />
               </Form.Item>
             </Col>
+            {drugName === '其他' && (
+              <Col span={8}>
+                <Form.Item name="drug_name_other" label="药品说明" rules={[{ required: true, message: '请输入药品说明' }]}>
+                  <Input placeholder="请输入具体药品名称" />
+                </Form.Item>
+              </Col>
+            )}
             <Col span={8}>
               <Form.Item name="eye" label="眼别">
                 <Radio.Group>

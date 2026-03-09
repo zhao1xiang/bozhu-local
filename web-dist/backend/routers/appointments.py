@@ -41,28 +41,36 @@ def read_appointments(
     doctor: Optional[str] = None,
     session: Session = Depends(get_session)
 ):
-    from models.patient import Patient
-    query = select(Appointment)
-    
-    if patient_id:
-        query = query.where(Appointment.patient_id == patient_id)
-    
-    if patient_name:
-        query = query.join(Patient).where(Patient.name.contains(patient_name))
-    
-    if start_date:
-        query = query.where(Appointment.appointment_date >= start_date)
-    if end_date:
-        query = query.where(Appointment.appointment_date <= end_date)
-    if injection_number:
-        query = query.where(Appointment.injection_number.contains(injection_number))
-    if doctor:
-        query = query.where(Appointment.doctor.contains(doctor))
+    try:
+        from models.patient import Patient
+        query = select(Appointment).where(Appointment.is_deleted == False)
         
-    query = query.order_by(Appointment.created_at.desc(), Appointment.appointment_date.asc())
-    query = query.offset(skip).limit(limit)
-    appointments = session.exec(query).all()
-    return appointments
+        if patient_id:
+            query = query.where(Appointment.patient_id == patient_id)
+        
+        if patient_name:
+            query = query.join(Patient).where(Patient.name.contains(patient_name))
+        
+        if start_date:
+            query = query.where(Appointment.appointment_date >= start_date)
+        if end_date:
+            query = query.where(Appointment.appointment_date <= end_date)
+        if injection_number:
+            query = query.where(Appointment.injection_number.contains(injection_number))
+        if doctor:
+            query = query.where(Appointment.doctor.contains(doctor))
+            
+        query = query.order_by(Appointment.created_at.desc(), Appointment.appointment_date.asc())
+        query = query.offset(skip).limit(limit)
+        appointments = session.exec(query).all()
+        return appointments
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching appointments: {str(e)}"
+        )
 
 @router.get("/{appointment_id}", response_model=Appointment)
 def read_appointment(appointment_id: str, session: Session = Depends(get_session)):
@@ -88,9 +96,21 @@ def update_appointment(appointment_id: str, appointment_update: AppointmentBase,
 
 @router.delete("/{appointment_id}")
 def delete_appointment(appointment_id: str, session: Session = Depends(get_session)):
+    """软删除预约"""
     appointment = session.get(Appointment, appointment_id)
     if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    session.delete(appointment)
+    
+    if appointment.is_deleted:
+        raise HTTPException(status_code=400, detail="Appointment already deleted")
+    
+    # 软删除
+    appointment.is_deleted = True
+    session.add(appointment)
     session.commit()
-    return {"ok": True}
+    
+    return {
+        "message": "Appointment deleted successfully",
+        "appointment_id": appointment_id
+    }
+
