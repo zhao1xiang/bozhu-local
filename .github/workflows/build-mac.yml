@@ -8,10 +8,10 @@ on:
 
 jobs:
   build-mac:
-    runs-on: macos-13
+    runs-on: macos-14
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -71,3 +71,11 @@ jobs:
         with:
           name: mac-package
           path: simple-web-package-mac.zip
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: simple-web-package-mac.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
