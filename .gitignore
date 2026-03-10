@@ -71,3 +71,12 @@ logs/
 *.temp
 *.bak
 *.backup
+
+# 打包生成的文件
+simple-web-package-win7-v*/
+simple-web-package-mac-v*/
+*.dmg
+*.zip
+web-dist/backend/__pycache__/
+web-dist/backend/models/__pycache__/
+web-dist/backend/routers/__pycache__/
