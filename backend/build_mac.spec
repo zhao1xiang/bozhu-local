@@ -55,7 +55,7 @@ exe = EXE(
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
+    target_arch='universal2',  # 支持Intel和Apple Silicon
     codesign_identity=None,
     entitlements_file=None,
 )
