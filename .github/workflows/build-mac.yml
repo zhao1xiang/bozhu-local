@@ -1,4 +1,4 @@
-name: Build Mac Intel Package
+name: Build Mac Package
 
 on:
   workflow_dispatch:
@@ -8,20 +8,16 @@ on:
 
 jobs:
   build-mac:
-    runs-on: macos-latest
+    runs-on: macos-13
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rosetta
-        run: |
-          softwareupdate --install-rosetta --agree-to-license || true
-
-      - name: Setup Python (Intel)
-        run: |
-          arch -x86_64 brew install python@3.9
-          arch -x86_64 python3.9 -m pip install --upgrade pip
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -38,13 +34,13 @@ jobs:
       - name: Install Backend Dependencies
         run: |
           cd backend
-          arch -x86_64 python3.9 -m pip install -r requirements.txt
-          arch -x86_64 python3.9 -m pip install pyinstaller
+          pip install -r requirements.txt
+          pip install pyinstaller
 
-      - name: Build Backend (Intel)
+      - name: Build Backend
         run: |
           cd backend
-          arch -x86_64 pyinstaller build_mac.spec --clean --noconfirm
+          pyinstaller build_mac.spec --clean --noconfirm
 
       - name: Create Package
         run: |
