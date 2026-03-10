@@ -21,6 +21,9 @@ wheels/
 *.egg
 .venv/
 
+# 但保留前端的lib目录
+!frontend/src/lib/
+
 # Node
 node_modules/
 npm-debug.log*

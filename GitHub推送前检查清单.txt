@@ -1,0 +1,150 @@
+GitHub推送前检查清单
+========================================
+
+使用方法：
+1. 运行 "创建GitHub仓库.bat" 脚本
+2. 检查生成的 bozhu_github 目录
+3. 确认以下项目都已完成
+4. 推送到GitHub
+
+========================================
+必需文件检查
+========================================
+
+后端核心文件:
+[ ] backend/models/ (所有模型文件)
+[ ] backend/routers/ (所有路由文件)
+[ ] backend/database.py
+[ ] backend/security.py
+[ ] backend/main.py
+[ ] backend/simple_web_server.py
+[ ] backend/requirements.txt
+[ ] backend/build_mac.spec (Mac打包配置)
+
+前端核心文件:
+[ ] frontend/src/ (所有源码)
+[ ] frontend/public/ (静态资源)
+[ ] frontend/package.json
+[ ] frontend/tsconfig.json
+[ ] frontend/vite.config.ts
+[ ] frontend/index.html
+
+GitHub Actions:
+[ ] .github/workflows/build-mac.yml
+
+配置文件:
+[ ] .gitignore
+[ ] README.md
+
+文档:
+[ ] 快速开始-GitHub自动打包.md
+
+========================================
+排除文件检查（确保不存在）
+========================================
+
+构建产物:
+[ ] 无 backend/dist/
+[ ] 无 backend/build/
+[ ] 无 frontend/dist/
+[ ] 无 node_modules/
+[ ] 无 __pycache__/
+
+打包文件:
+[ ] 无 simple-web-package-*/
+[ ] 无 *.exe
+[ ] 无 *.dmg
+
+数据库文件:
+[ ] 无 *.db
+[ ] 无 *.sqlite
+
+临时文件:
+[ ] 无 *.log
+[ ] 无 *.tmp
+[ ] 无 .DS_Store
+
+Windows特定:
+[ ] 无 *.bat (除了本脚本)
+[ ] 无 打包*.bat
+
+========================================
+推送步骤
+========================================
+
+1. 在GitHub创建仓库
+   网址: https://github.com/new
+   仓库名: bozhu_local
+   类型: Public (公开)
+
+2. 进入生成的目录
+   cd bozhu_github
+
+3. 添加远程仓库
+   git remote add origin https://github.com/<your-username>/bozhu_local.git
+
+4. 推送代码
+   git push -u origin master
+
+5. 启用GitHub Actions
+   - 访问仓库的 Actions 标签
+   - 点击 "I understand my workflows, go ahead and enable them"
+
+6. 触发Mac打包
+   - 点击 "Build Mac Version"
+   - 点击 "Run workflow"
+   - 等待构建完成
+   - 下载打包结果
+
+========================================
+验证清单
+========================================
+
+推送后验证:
+[ ] GitHub仓库页面正常显示
+[ ] README.md正确渲染
+[ ] Actions标签可见
+[ ] 可以看到 "Build Mac Version" workflow
+[ ] 代码结构清晰，无多余文件
+
+首次构建:
+[ ] 点击 "Run workflow" 成功
+[ ] 构建过程无错误
+[ ] 构建时间约10-15分钟
+[ ] 可以下载 mac-package
+[ ] 解压后文件完整
+
+========================================
+常见问题
+========================================
+
+Q: 脚本运行失败？
+A: 确保在项目根目录运行脚本
+
+Q: 某些文件没有复制？
+A: 检查源文件是否存在，手动复制缺失文件
+
+Q: GitHub Actions构建失败？
+A: 查看构建日志，检查:
+   - requirements.txt 是否正确
+   - package.json 是否正确
+   - build_mac.spec 是否存在
+
+Q: 推送被拒绝？
+A: 检查:
+   - GitHub仓库是否已创建
+   - 远程仓库地址是否正确
+   - 是否有推送权限
+
+========================================
+完成标志
+========================================
+
+当以下都完成时，表示成功:
+✓ GitHub仓库创建成功
+✓ 代码推送成功
+✓ Actions可以运行
+✓ Mac版本构建成功
+✓ 可以下载打包文件
+
+========================================
