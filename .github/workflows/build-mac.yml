@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-mac:
-    runs-on: macos-13   # Intel Mac runner（关键）
+    runs-on: macos-latest
 
     steps:
       - name: Checkout code
@@ -37,10 +37,10 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build Backend
+      - name: Build Backend (Intel x86_64)
         run: |
           cd backend
-          pyinstaller build_mac.spec --clean --noconfirm
+          arch -x86_64 pyinstaller build_mac.spec --clean --noconfirm
 
       - name: Create Package
         run: |
