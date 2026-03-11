@@ -127,7 +127,13 @@ const Patients: React.FC = () => {
 
   const handleEdit = (record: Patient) => {
     setEditingPatient(record);
-    form.setFieldsValue(record);
+    // 将诊断和药物字符串转换为数组（兼容旧数据）
+    const formData = {
+      ...record,
+      diagnosis: record.diagnosis ? record.diagnosis.split(',').map(s => s.trim()) : [],
+      drug_type: record.drug_type ? record.drug_type.split(',').map(s => s.trim()) : [],
+    };
+    form.setFieldsValue(formData);
     setIsModalOpen(true);
   };
 
@@ -191,13 +197,20 @@ const Patients: React.FC = () => {
       }
     }
     
+    // 将诊断和药物数组转换为逗号分隔的字符串
+    const patientData = {
+      ...values,
+      diagnosis: Array.isArray(values.diagnosis) ? values.diagnosis.join(',') : values.diagnosis || '',
+      drug_type: Array.isArray(values.drug_type) ? values.drug_type.join(',') : values.drug_type || '',
+    };
+    
     try {
       if (editingPatient) {
-        await apiClient.put(`/patients/${editingPatient.id}`, values);
+        await apiClient.put(`/patients/${editingPatient.id}`, patientData);
         message.success('更新成功');
         return editingPatient.id;
       } else {
-        const response = await apiClient.post('/patients', values);
+        const response = await apiClient.post('/patients', patientData);
         message.success('添加成功');
         return response.data.id;
       }
@@ -576,15 +589,36 @@ const Patients: React.FC = () => {
       dataIndex: 'diagnosis',
       key: 'diagnosis',
       filteredValue: diagnosisFilter ? [diagnosisFilter] : null,
-      onFilter: (value, record) => record.diagnosis === value,
+      onFilter: (value, record) => record.diagnosis?.includes(value as string) ?? false,
+      render: (text) => {
+        if (!text) return '-';
+        const items = text.split(',').map((s: string) => s.trim()).filter(Boolean);
+        return (
+          <Space size={[0, 4]} wrap>
+            {items.map((item: string, idx: number) => (
+              <Tag key={idx} color="blue">{item}</Tag>
+            ))}
+          </Space>
+        );
+      },
     },
     {
       title: '药物',
       dataIndex: 'drug_type',
       key: 'drug_type',
       filteredValue: drugFilter ? [drugFilter] : null,
-      onFilter: (value, record) => record.drug_type === value,
-      render: (text) => <Tag color={text === '法瑞西单抗' ? 'purple' : 'default'}>{text}</Tag>,
+      onFilter: (value, record) => record.drug_type?.includes(value as string) ?? false,
+      render: (text) => {
+        if (!text) return '-';
+        const items = text.split(',').map((s: string) => s.trim()).filter(Boolean);
+        return (
+          <Space size={[0, 4]} wrap>
+            {items.map((item: string, idx: number) => (
+              <Tag key={idx} color={item === '法瑞西单抗' ? 'purple' : 'default'}>{item}</Tag>
+            ))}
+          </Space>
+        );
+      },
     },
     {
       title: '患者类型',
@@ -745,29 +779,34 @@ const Patients: React.FC = () => {
             />
           </Form.Item>
           <Form.Item name="diagnosis" label="诊断">
-            <Select placeholder="请选择或输入诊断" showSearch>
-              {diagnoses.map(d => (
+            <Select 
+              mode="multiple" 
+              placeholder="请选择诊断（可多选）" 
+              showSearch
+              maxTagCount="responsive"
+            >
+              {diagnoses.filter(d => d.value !== '其他').map(d => (
                 <Select.Option key={d.id} value={d.value}>{d.label}</Select.Option>
               ))}
             </Select>
           </Form.Item>
-          {diagnosis === '其他' && (
-            <Form.Item name="diagnosis_other" label="诊断说明" rules={[{ required: true, message: '请输入诊断说明' }]}>
-              <Input placeholder="请输入具体诊断" />
-            </Form.Item>
-          )}
+          <Form.Item name="diagnosis_other" label="诊断其他说明">
+            <Input placeholder="如有其他诊断，请在此输入" />
+          </Form.Item>
           <Form.Item name="drug_type" label="治疗药物">
-            <Select placeholder="请选择治疗药物">
-              {drugs.map(d => (
+            <Select 
+              mode="multiple" 
+              placeholder="请选择治疗药物（可多选）"
+              maxTagCount="responsive"
+            >
+              {drugs.filter(d => d.value !== '其他').map(d => (
                 <Select.Option key={d.id} value={d.value}>{d.label}</Select.Option>
               ))}
             </Select>
           </Form.Item>
-          {drugType === '其他' && (
-            <Form.Item name="drug_type_other" label="药物说明" rules={[{ required: true, message: '请输入药物说明' }]}>
-              <Input placeholder="请输入具体药物名称" />
-            </Form.Item>
-          )}
+          <Form.Item name="drug_type_other" label="药物其他说明">
+            <Input placeholder="如有其他药物，请在此输入" />
+          </Form.Item>
           <Form.Item name="patient_type" label="患者类型">
             <Radio.Group>
               <Radio value="初治">初治</Radio>
