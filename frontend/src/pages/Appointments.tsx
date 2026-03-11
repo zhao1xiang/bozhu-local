@@ -432,6 +432,7 @@ const Appointments: React.FC = () => {
       appointment_date: dayjs(record.appointment_date),
       follow_up_date: record.follow_up_date ? dayjs(record.follow_up_date) : undefined,
       next_follow_up_date: record.next_follow_up_date ? dayjs(record.next_follow_up_date) : undefined,
+      time_slot: record.time_slot || '上午', // 默认上午
     });
     // Handle scheme related logic if needed, but for edit usually we just edit fields
     setEditingId(record.id);
@@ -705,6 +706,12 @@ const Appointments: React.FC = () => {
       },
     },
     {
+      title: '时间段',
+      dataIndex: 'time_slot',
+      key: 'time_slot',
+      render: (text) => text || '上午',
+    },
+    {
       title: '注药号',
       dataIndex: 'injection_number',
       key: 'injection_number',
@@ -739,7 +746,14 @@ const Appointments: React.FC = () => {
       title: '治疗周期',
       dataIndex: 'treatment_phase',
       key: 'treatment_phase',
-      render: (text) => <Tag color={text === '强化期' ? 'blue' : 'green'}>{text || '-'}</Tag>,
+      render: (text) => {
+        const colorMap: Record<string, string> = {
+          '强化期': 'blue',
+          '巩固期': 'green',
+          '延长治疗期': 'orange'
+        };
+        return <Tag color={colorMap[text] || 'default'}>{text || '-'}</Tag>;
+      },
     },
     {
       title: '医生',
@@ -881,7 +895,7 @@ const Appointments: React.FC = () => {
                   <>
                     {fields.map(({ key, name, ...restField }) => (
                       <Row gutter={8} key={key} align="middle">
-                        <Col span={5}>
+                        <Col span={4}>
                           <Form.Item
                             {...restField}
                             name={[name, 'follow_up_date']}
@@ -890,13 +904,26 @@ const Appointments: React.FC = () => {
                             <DatePicker style={{ width: '100%' }} />
                           </Form.Item>
                         </Col>
-                        <Col span={5}>
+                        <Col span={4}>
                           <Form.Item
                             {...restField}
                             name={[name, 'appointment_date']}
                             label="玻注日期"
                           >
                             <DatePicker style={{ width: '100%' }} />
+                          </Form.Item>
+                        </Col>
+                        <Col span={3}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'time_slot']}
+                            label="时间段"
+                            initialValue="上午"
+                          >
+                            <Select placeholder="时间段" options={[
+                              { label: '上午', value: '上午' },
+                              { label: '下午', value: '下午' }
+                            ]} />
                           </Form.Item>
                         </Col>
                         <Col span={3}>
@@ -923,7 +950,11 @@ const Appointments: React.FC = () => {
                             name={[name, 'treatment_phase']}
                             label="阶段"
                           >
-                            <Select placeholder="阶段" options={[{ label: '强化期', value: '强化期' }, { label: '巩固期', value: '巩固期' }]} />
+                            <Select placeholder="阶段" options={[
+                              { label: '强化期', value: '强化期' }, 
+                              { label: '巩固期', value: '巩固期' },
+                              { label: '延长治疗期', value: '延长治疗期' }
+                            ]} />
                           </Form.Item>
                         </Col>
                         <Col span={3}>
@@ -999,6 +1030,14 @@ const Appointments: React.FC = () => {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
+                  <Form.Item name="time_slot" label="时间段" initialValue="上午">
+                    <Radio.Group>
+                      <Radio value="上午">上午</Radio>
+                      <Radio value="下午">下午</Radio>
+                    </Radio.Group>
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
                   <Form.Item name="injection_number" label="注药号">
                     <Input placeholder="例如：20231001-01" />
                   </Form.Item>
@@ -1013,6 +1052,7 @@ const Appointments: React.FC = () => {
                     <Radio.Group>
                       <Radio value="强化期">强化期</Radio>
                       <Radio value="巩固期">巩固期</Radio>
+                      <Radio value="延长治疗期">延长治疗期</Radio>
                     </Radio.Group>
                   </Form.Item>
                 </Col>
