@@ -78,6 +78,7 @@ def auto_migrate_database(db_path=None):
         migrations = {
             'patient': [
                 ('medical_card_number', 'VARCHAR', '就诊卡号'),
+                ('remarks', 'TEXT', '备注'),
             ],
             'appointment': [
                 ('attending_doctor', 'VARCHAR', '管床医生'),

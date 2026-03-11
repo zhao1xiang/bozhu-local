@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Table, Button, Input, Space, Modal, Form, Select, Checkbox, InputNumber, message, DatePicker, Tag, Radio, Upload } from 'antd';
 import { PlusOutlined, SearchOutlined, EditOutlined, ProjectOutlined, CalendarOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { Patient, InjectionScheme, DataDictionaryItem, Appointment } from '@/types';
+import { Patient, DataDictionaryItem, Appointment } from '@/types';
 import { apiClient } from '@/api/client';
 import TreatmentProgress from '@/components/TreatmentProgress';
 import dayjs from 'dayjs';
@@ -12,7 +12,6 @@ import ExcelJS from 'exceljs';
 const Patients: React.FC = () => {
   const navigate = useNavigate();
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [schemes, setSchemes] = useState<InjectionScheme[]>([]);
   const [loading, setLoading] = useState(false);
   const [drugs, setDrugs] = useState<DataDictionaryItem[]>([]);
   const [diagnoses, setDiagnoses] = useState<DataDictionaryItem[]>([]);
@@ -25,11 +24,6 @@ const Patients: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
 
-  // Scheme Apply Modal State
-  const [isSchemeModalOpen, setIsSchemeModalOpen] = useState(false);
-  const [selectedPatientForScheme, setSelectedPatientForScheme] = useState<Patient | null>(null);
-  const [availableSchemes, setAvailableSchemes] = useState<InjectionScheme[]>([]);
-
   // Treatment Progress State
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
   const [selectedPatientForProgress, setSelectedPatientForProgress] = useState<Patient | null>(null);
@@ -39,7 +33,6 @@ const Patients: React.FC = () => {
   const [importing, setImporting] = useState(false);
 
   const [form] = Form.useForm();
-  const [schemeForm] = Form.useForm();
   
   // 监听患者类型变化
   const patientType = Form.useWatch('patient_type', form);
@@ -105,18 +98,8 @@ const Patients: React.FC = () => {
     }
   };
 
-  const fetchSchemes = async () => {
-    try {
-      const response = await apiClient.get<InjectionScheme[]>('/schemes');
-      setSchemes(response.data);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
   useEffect(() => {
     fetchData();
-    fetchSchemes();
   }, []);
 
   const handleAdd = () => {
@@ -161,29 +144,6 @@ const Patients: React.FC = () => {
         }
       }
     });
-  };
-
-  const handleApplyScheme = (record: Patient) => {
-    setSelectedPatientForScheme(record);
-    // Filter schemes by drug type if possible, or show all valid ones
-    // Assuming scheme has drug_type and patient has drug_type
-    const relevantSchemes = schemes.filter(s => s.drug_type === record.drug_type && s.status === 'active');
-
-    if (relevantSchemes.length === 0) {
-      message.warning(`未找到适用于 ${record.drug_type} 的治疗方案模板，请先去配置方案`);
-      return;
-    }
-
-    setAvailableSchemes(relevantSchemes);
-    schemeForm.resetFields();
-    // Default to first scheme
-    if (relevantSchemes.length > 0) {
-      schemeForm.setFieldsValue({
-        scheme_id: relevantSchemes[0].id,
-        start_date: dayjs()
-      });
-    }
-    setIsSchemeModalOpen(true);
   };
 
   const savePatient = async () => {
@@ -253,21 +213,6 @@ const Patients: React.FC = () => {
       console.error(error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSchemeOk = async () => {
-    try {
-      const values = await schemeForm.validateFields();
-      if (!selectedPatientForScheme) return;
-
-      await apiClient.post(`/schemes/apply/${values.scheme_id}?patient_id=${selectedPatientForScheme.id}&start_date=${values.start_date.format('YYYY-MM-DD')}`);
-
-      message.success(`已为 ${selectedPatientForScheme.name} 生成治疗排程`);
-      setIsSchemeModalOpen(false);
-    } catch (error) {
-      console.error(error);
-      message.error('应用方案失败');
     }
   };
 
@@ -857,31 +802,14 @@ const Patients: React.FC = () => {
               </Form.Item>
             </Space>
           </div>
-        </Form>
-      </Modal>
-
-      {/* Apply Scheme Modal */}
-      <Modal
-        title={`为 ${selectedPatientForScheme?.name} 生成治疗排程`}
-        open={isSchemeModalOpen}
-        onOk={handleSchemeOk}
-        onCancel={() => setIsSchemeModalOpen(false)}
-      >
-        <Form form={schemeForm} layout="vertical">
-          <Form.Item name="scheme_id" label="选择治疗方案" rules={[{ required: true }]}>
-            <Select>
-              {availableSchemes.map(s => (
-                <Select.Option key={s.id} value={s.id}>{s.name}</Select.Option>
-              ))}
-            </Select>
+          <Form.Item name="remarks" label="备注">
+            <Input.TextArea 
+              rows={3} 
+              placeholder="请输入备注信息（选填）" 
+              maxLength={500}
+              showCount
+            />
           </Form.Item>
-          <Form.Item name="start_date" label="首针注射日期" rules={[{ required: true }]}>
-            <DatePicker style={{ width: '100%' }} />
-          </Form.Item>
-          <div style={{ background: '#e6f7ff', padding: 12, borderRadius: 4, border: '1px solid #91d5ff' }}>
-            <p>点击确定后，系统将根据选定方案自动生成一系列预约记录。</p>
-            <p>例如选择 T&E 标准方案，将生成前4针每月一次，以及后续逐步延长的预约。</p>
-          </div>
         </Form>
       </Modal>
 

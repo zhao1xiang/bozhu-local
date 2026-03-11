@@ -29,6 +29,7 @@ def create_patient_import_template():
         ("右眼注射", "必填，是/否"),
         ("患者类型", "必填，初治/经治"),
         ("已完成针数", "选填，仅经治患者填写"),
+        ("备注", "选填"),
     ]
     
     # 设置表头样式
@@ -60,7 +61,7 @@ def create_patient_import_template():
     # 添加示例数据
     example_data = [
         "张三", "MZ001", "JZK001", "13800138000", "湿性AMD,糖尿病视网膜病变", "", "雷珠单抗,康柏西普", "", 
-        "0.5", "0.6", "0.8", "0.9", "是", "否", "初治", ""
+        "0.5", "0.6", "0.8", "0.9", "是", "否", "初治", "", "这是备注信息"
     ]
     
     for col_idx, value in enumerate(example_data, 1):
@@ -70,7 +71,7 @@ def create_patient_import_template():
         cell.alignment = Alignment(horizontal='center', vertical='center')
     
     # 设置列宽
-    column_widths = [12, 12, 12, 15, 15, 15, 15, 15, 12, 12, 12, 12, 12, 12, 12, 12]
+    column_widths = [12, 12, 12, 15, 15, 15, 15, 15, 12, 12, 12, 12, 12, 12, 12, 12, 20]
     for col_idx, width in enumerate(column_widths, 1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
     

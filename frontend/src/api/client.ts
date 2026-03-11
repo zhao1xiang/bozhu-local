@@ -1,9 +1,9 @@
 import axios from 'axios';
 
 // 支持环境变量配置 API 地址
-// Tauri 桌面版使用 127.0.0.1:8000/api
+// Tauri 桌面版使用 127.0.0.1:38125/api
 // Web 版可以通过 VITE_API_URL 环境变量配置（应包含 /api 前缀）
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:38125/api';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

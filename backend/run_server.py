@@ -247,13 +247,13 @@ if __name__ == "__main__":
             logger.warning(f"[WARN] 主应用文件不存在: {main_file}")
         
         logger.info("启动 Uvicorn 服务器...")
-        logger.info("监听地址: 127.0.0.1:8000")
+        logger.info("监听地址: 127.0.0.1:38125")
         
         # 启动 Uvicorn 服务器
         uvicorn.run(
             "main:app",
             host="127.0.0.1",
-            port=8030,
+            port=38125,
             log_level="info",
             access_log=True
         )

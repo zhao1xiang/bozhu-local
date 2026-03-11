@@ -179,6 +179,7 @@ async def import_patients(file: UploadFile = File(...), session: Session = Depen
                 # 患者类型和针数
                 patient_type = str(row[14]).strip() if row[14] else None
                 injection_count = int(row[15]) if row[15] and str(row[15]).strip() else None
+                remarks = str(row[16]).strip() if row[16] else None
                 
                 # 数据验证
                 if not name:
@@ -238,7 +239,8 @@ async def import_patients(file: UploadFile = File(...), session: Session = Depen
                     left_eye=left_eye,
                     right_eye=right_eye,
                     patient_type=patient_type,
-                    injection_count=injection_count
+                    injection_count=injection_count,
+                    remarks=remarks
                 )
                 
                 db_patient = Patient.model_validate(patient_data)

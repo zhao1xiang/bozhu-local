@@ -4,7 +4,7 @@ setlocal enabledelayedexpansion
 
 echo.
 echo ╔════════════════════════════════════════════════════════════╗
-echo ║         Web 版本打包工具 v2.1.7                           ║
+echo ║         Web 版本打包工具 v2.2.1                           ║
 echo ║         Windows 7 兼容版本 - bcrypt 支持                  ║
 echo ╚════════════════════════════════════════════════════════════╝
 echo.
@@ -250,13 +250,13 @@ echo.
 cd ..
 
 REM 创建输出目录
-set OUTPUT_DIR=simple-web-package-win7-v2.1.7
+set OUTPUT_DIR=simple-web-package-win7-v2.2.1
 if exist "%OUTPUT_DIR%" (
     echo [1/4] 清理旧的输出目录...
     rmdir /s /q "%OUTPUT_DIR%"
     if errorlevel 1 (
         echo ⚠ 无法删除旧目录，可能被占用
-        set OUTPUT_DIR=simple-web-package-win7-v2.1.7-new
+        set OUTPUT_DIR=simple-web-package-win7-v2.2.1-new
         echo   使用新目录名：!OUTPUT_DIR!
     )
 )
@@ -301,7 +301,7 @@ REM 创建使用说明
 (
 echo ========================================
 echo   眼科注射预约系统 - Windows 7 版本
-echo   v2.1.7-win7-auto-migrate
+echo   v2.2.1
 echo ========================================
 echo.
 echo 使用方法：
@@ -310,11 +310,19 @@ echo 2. 程序会自动打开浏览器
 echo 3. 默认账号：admin
 echo 4. 默认密码：admin
 echo.
+echo 新功能（v2.2.1）：
+echo - ✅ 患者批量导入（Excel模板）
+echo - ✅ 诊断和药物多选（兼容旧数据）
+echo - ✅ 治疗阶段新增"延长治疗期"
+echo - ✅ 玻注日期增加上午/下午时间段
+echo - ✅ 所有日期选择器中文化
+echo.
 echo 重要提示：
 echo - ✅ 自动检测并升级数据库结构
 echo - ✅ 自动迁移旧密码格式（bcrypt → PBKDF2）
 echo - ✅ 旧密码统一重置为：admin
 echo - ✅ 可以直接使用旧版本的 database.db
+echo - ✅ 完全兼容旧版本数据
 echo.
 echo 数据库迁移（自动）：
 echo - 直接复制旧版本的 database.db 到此目录
@@ -332,14 +340,14 @@ echo 1. 如果无法启动，请安装 VC++ 运行库
 echo    下载：https://aka.ms/vs/17/release/vc_redist.x64.exe
 echo.
 echo 2. 如果浏览器未自动打开，请手动访问：
-echo    http://127.0.0.1:8000
+echo    http://127.0.0.1:38125
 echo.
-echo 3. 如果端口被占用，请关闭其他占用 8000 端口的程序
+echo 3. 如果端口被占用，请关闭其他占用 38125 端口的程序
 echo.
 echo 4. 如果杀毒软件报警，请添加信任（本程序安全无毒）
 echo.
 echo 技术信息：
-echo - 版本：v2.1.7-win7-auto-migrate
+echo - 版本：v2.2.1
 echo - 打包日期：%date% %time%
 echo - Python 版本：3.7.9
 echo - 密码格式：PBKDF2（自动迁移）

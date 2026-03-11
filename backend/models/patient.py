@@ -20,6 +20,7 @@ class PatientBase(SQLModel):
     right_eye: bool = False
     patient_type: Optional[str] = Field(default=None, description="患者类型") # 初治/经治
     injection_count: Optional[int] = Field(default=None, description="已完成针数（仅经治患者）")
+    remarks: Optional[str] = Field(default=None, description="备注")
     status: str = Field(default="active", index=True)
     is_deleted: bool = Field(default=False, index=True, description="软删除标记")
 

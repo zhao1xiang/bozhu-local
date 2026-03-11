@@ -17,6 +17,7 @@ export interface Patient {
   status: string;
   patient_type?: string;
   injection_count?: number;
+  remarks?: string;
   created_at: string;
   updated_at: string;
 }
@@ -39,6 +40,7 @@ export interface PatientBase {
   status: string;
   patient_type?: string;
   injection_count?: number;
+  remarks?: string;
 }
 
 export interface Appointment {

@@ -162,21 +162,9 @@ def main():
         
         # 服务器配置
         host = "127.0.0.1"
+        port = 38125  # 固定端口号
         
-        # 查找可用端口
-        logger.info("正在查找可用端口...")
-        port = find_available_port(start_port=8000, max_attempts=10)
-        
-        if port is None:
-            logger.error("无法找到可用端口（尝试了 8000-8009）")
-            logger.error("请关闭占用这些端口的程序后重试")
-            input("按回车键退出...")
-            sys.exit(1)
-        
-        if port != 8000:
-            logger.warning(f"端口 8000 被占用，使用端口 {port}")
-        else:
-            logger.info(f"使用默认端口 {port}")
+        logger.info(f"使用固定端口 {port}")
         
         url = f"http://{host}:{port}"
         
