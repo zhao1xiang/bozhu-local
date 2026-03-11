@@ -8,22 +8,17 @@ on:
 
 jobs:
   build-mac:
-    name: Build macOS ${{ matrix.arch }}
-    strategy:
-      matrix:
-        include:
-          - arch: arm64
-            runner: macos-14
-          - arch: x86_64
-            runner: macos-13
-
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-14
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Install Rosetta
+        run: |
+          softwareupdate --install-rosetta --agree-to-license
+
+      - name: Setup Python (ARM)
         uses: actions/setup-python@v5
         with:
           python-version: "3.9"
@@ -33,12 +28,6 @@ jobs:
         with:
           node-version: "18"
 
-      - name: Show System Info
-        run: |
-          uname -a
-          python --version
-          node --version
-
       - name: Build Frontend
         run: |
           cd frontend
@@ -46,30 +35,41 @@ jobs:
           npm run build
           cd ..
 
-      - name: Install Backend Dependencies
+      - name: Install Backend Dependencies (ARM)
         run: |
           cd backend
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build Backend
+      - name: Build Backend ARM
         run: |
           cd backend
           pyinstaller build_mac.spec --clean --noconfirm
+          mv dist/backend_server dist/backend_server_arm64
 
-      - name: Prepare Package
+      - name: Install Backend Dependencies (Intel)
         run: |
-          PACKAGE_NAME="simple-web-package-mac-${{ matrix.arch }}"
-          mkdir $PACKAGE_NAME
+          cd backend
+          arch -x86_64 pip3 install -r requirements.txt
+          arch -x86_64 pip3 install pyinstaller
 
-          cp backend/dist/backend_server $PACKAGE_NAME/
-          chmod +x $PACKAGE_NAME/backend_server
+      - name: Build Backend Intel
+        run: |
+          cd backend
+          arch -x86_64 pyinstaller build_mac.spec --clean --noconfirm
+          mv dist/backend_server dist/backend_server_x86_64
 
-          cp -r frontend/dist $PACKAGE_NAME/frontend
+      - name: Package ARM
+        run: |
+          mkdir simple-web-package-mac-arm64
 
-          cat > $PACKAGE_NAME/start.command << 'EOF'
+          cp backend/dist/backend_server_arm64 simple-web-package-mac-arm64/backend_server
+          chmod +x simple-web-package-mac-arm64/backend_server
+
+          cp -r frontend/dist simple-web-package-mac-arm64/frontend
+
+          cat > simple-web-package-mac-arm64/start.command << 'EOF'
           #!/bin/bash
-
           DIR="$( cd "$( dirname "$0" )" && pwd )"
           cd "$DIR"
 
@@ -79,20 +79,52 @@ jobs:
           ./backend_server
           EOF
 
-          chmod +x $PACKAGE_NAME/start.command
+          chmod +x simple-web-package-mac-arm64/start.command
 
-          zip -r ${PACKAGE_NAME}.zip $PACKAGE_NAME
+          zip -r simple-web-package-mac-arm64.zip simple-web-package-mac-arm64
 
-      - name: Upload Artifact
+      - name: Package Intel
+        run: |
+          mkdir simple-web-package-mac-x86_64
+
+          cp backend/dist/backend_server_x86_64 simple-web-package-mac-x86_64/backend_server
+          chmod +x simple-web-package-mac-x86_64/backend_server
+
+          cp -r frontend/dist simple-web-package-mac-x86_64/frontend
+
+          cat > simple-web-package-mac-x86_64/start.command << 'EOF'
+          #!/bin/bash
+          DIR="$( cd "$( dirname "$0" )" && pwd )"
+          cd "$DIR"
+
+          xattr -dr com.apple.quarantine backend_server 2>/dev/null
+          chmod +x backend_server
+
+          ./backend_server
+          EOF
+
+          chmod +x simple-web-package-mac-x86_64/start.command
+
+          zip -r simple-web-package-mac-x86_64.zip simple-web-package-mac-x86_64
+
+      - name: Upload ARM Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mac-${{ matrix.arch }}
-          path: simple-web-package-mac-${{ matrix.arch }}.zip
+          name: mac-arm64
+          path: simple-web-package-mac-arm64.zip
+
+      - name: Upload Intel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-x86_64
+          path: simple-web-package-mac-x86_64.zip
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: simple-web-package-mac-${{ matrix.arch }}.zip
+          files: |
+            simple-web-package-mac-arm64.zip
+            simple-web-package-mac-x86_64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
