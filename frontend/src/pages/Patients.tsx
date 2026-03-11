@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Table, Button, Input, Space, Modal, Form, Select, Checkbox, InputNumber, message, DatePicker, Tag, Radio } from 'antd';
-import { PlusOutlined, SearchOutlined, EditOutlined, ProjectOutlined, CalendarOutlined, DownloadOutlined } from '@ant-design/icons';
+import { Table, Button, Input, Space, Modal, Form, Select, Checkbox, InputNumber, message, DatePicker, Tag, Radio, Upload } from 'antd';
+import { PlusOutlined, SearchOutlined, EditOutlined, ProjectOutlined, CalendarOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { Patient, InjectionScheme, DataDictionaryItem, Appointment } from '@/types';
 import { apiClient } from '@/api/client';
@@ -33,6 +33,10 @@ const Patients: React.FC = () => {
   // Treatment Progress State
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
   const [selectedPatientForProgress, setSelectedPatientForProgress] = useState<Patient | null>(null);
+
+  // Import Modal State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const [form] = Form.useForm();
   const [schemeForm] = Form.useForm();
@@ -460,6 +464,92 @@ const Patients: React.FC = () => {
     message.success('导出成功');
   };
 
+  // 下载导入模板
+  const handleDownloadTemplate = async () => {
+    try {
+      const response = await apiClient.get('/patients/template/download', {
+        responseType: 'blob'
+      });
+      const blob = new Blob([response.data], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = '患者批量导入模板.xlsx';
+      link.click();
+      URL.revokeObjectURL(url);
+      message.success('模板下载成功');
+    } catch (error) {
+      console.error(error);
+      message.error('模板下载失败');
+    }
+  };
+
+  // 批量导入患者
+  const handleImport = async (file: File) => {
+    setImporting(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await apiClient.post('/patients/import', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      const result = response.data;
+      
+      // 显示导入结果
+      Modal.info({
+        title: '导入完成',
+        width: 600,
+        content: (
+          <div>
+            <p>成功导入: {result.success_count} 条</p>
+            <p>失败: {result.error_count} 条</p>
+            
+            {result.duplicates && result.duplicates.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <p style={{ fontWeight: 'bold', color: '#ff4d4f' }}>重复的患者:</p>
+                <ul style={{ maxHeight: 200, overflow: 'auto' }}>
+                  {result.duplicates.map((dup: any, idx: number) => (
+                    <li key={idx}>
+                      第{dup.row}行: {dup.name} ({dup.phone}) - 已存在患者: {dup.existing_name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {result.errors && result.errors.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <p style={{ fontWeight: 'bold', color: '#ff4d4f' }}>错误信息:</p>
+                <ul style={{ maxHeight: 200, overflow: 'auto' }}>
+                  {result.errors.map((err: any, idx: number) => (
+                    <li key={idx}>第{err.row}行: {err.error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ),
+        onOk: () => {
+          setIsImportModalOpen(false);
+          fetchData(); // 刷新患者列表
+        }
+      });
+    } catch (error: any) {
+      console.error(error);
+      message.error(error.response?.data?.detail || '导入失败');
+    } finally {
+      setImporting(false);
+    }
+
+    return false; // 阻止自动上传
+  };
+
   const columns: ColumnsType<Patient> = [
     {
       title: '姓名',
@@ -609,6 +699,9 @@ const Patients: React.FC = () => {
         <Space>
           <Button icon={<DownloadOutlined />} onClick={handleExport}>
             导出
+          </Button>
+          <Button icon={<UploadOutlined />} onClick={() => setIsImportModalOpen(true)}>
+            批量导入
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
             添加患者
@@ -762,6 +855,68 @@ const Patients: React.FC = () => {
         width={1000}
       >
         {selectedPatientForProgress && <TreatmentProgress patient={selectedPatientForProgress} />}
+      </Modal>
+
+      {/* Import Modal */}
+      <Modal
+        title="批量导入患者"
+        open={isImportModalOpen}
+        onCancel={() => setIsImportModalOpen(false)}
+        footer={null}
+        width={600}
+      >
+        <div style={{ padding: '20px 0' }}>
+          <div style={{ marginBottom: 24 }}>
+            <h4>导入步骤：</h4>
+            <ol>
+              <li>下载Excel模板</li>
+              <li>按照模板格式填写患者信息</li>
+              <li>上传填写好的Excel文件</li>
+            </ol>
+          </div>
+
+          <div style={{ marginBottom: 24 }}>
+            <Button 
+              icon={<DownloadOutlined />} 
+              onClick={handleDownloadTemplate}
+              block
+              size="large"
+            >
+              下载导入模板
+            </Button>
+          </div>
+
+          <div>
+            <Upload.Dragger
+              accept=".xlsx,.xls"
+              beforeUpload={handleImport}
+              showUploadList={false}
+              disabled={importing}
+            >
+              <p className="ant-upload-drag-icon">
+                <UploadOutlined style={{ fontSize: 48, color: '#1890ff' }} />
+              </p>
+              <p className="ant-upload-text">
+                {importing ? '正在导入...' : '点击或拖拽Excel文件到此区域'}
+              </p>
+              <p className="ant-upload-hint">
+                支持 .xlsx 和 .xls 格式
+              </p>
+            </Upload.Dragger>
+          </div>
+
+          <div style={{ marginTop: 16, padding: 12, background: '#fff7e6', borderRadius: 4, border: '1px solid #ffd591' }}>
+            <p style={{ margin: 0, fontSize: 12, color: '#ad6800' }}>
+              <strong>注意事项：</strong>
+            </p>
+            <ul style={{ margin: '8px 0 0 0', paddingLeft: 20, fontSize: 12, color: '#ad6800' }}>
+              <li>姓名和手机号为必填项</li>
+              <li>手机号不能重复</li>
+              <li>患者类型必须是"初治"或"经治"</li>
+              <li>左眼注射/右眼注射填写"是"或"否"</li>
+            </ul>
+          </div>
+        </div>
       </Modal>
     </div>
   );
