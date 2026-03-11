@@ -1,135 +1,81 @@
-name: Build Mac Version
+name: Build Mac Package
 
 on:
-  workflow_dispatch:  # 手动触发，可自定义版本号
-    inputs:
-      manual_version:
-        description: '手动构建版本号（如v2.1.8）'
-        required: false
-        default: 'v2.1.8'
+  workflow_dispatch:
   push:
     tags:
-      - 'v*'  # 推送v开头Tag自动触发，读取Tag为版本号
+      - "v*"
 
 jobs:
   build-mac:
-    runs-on: macos-14  # 兼容M1/M2，也能打包Intel通用包
+    runs-on: macos-14
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.9
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
-          cache: 'pip'  # 缓存pip依赖，加速构建
+          python-version: "3.9"
 
-      - name: Set up Node.js 18
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'  # 缓存npm依赖，加速构建
+          node-version: "18"
 
-      - name: 定义动态版本号
-        id: set_version
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            VERSION="${{ github.ref_name }}"
-          else
-            VERSION="${{ github.event.inputs.manual_version }}"
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "本次构建版本：$VERSION"
-
-      - name: 构建前端
+      - name: Build Frontend
         run: |
           cd frontend
-          npm install --force
-          npm run build || { echo "前端构建失败！"; exit 1; }
+          npm install
+          npm run build
           cd ..
 
-      - name: 安装后端依赖（含pyinstaller）
+      - name: Install Backend Dependencies
         run: |
           cd backend
-          # 清华源加速，无需可注释
-          pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
-          pip install -i https://pypi.tuna.tsinghua.edu.cn/simple pyinstaller
-          cd ..
+          pip install -r requirements.txt
+          pip install pyinstaller
 
-      - name: 构建后端【通用二进制（Intel+Apple Silicon）】
+      - name: Build Backend
         run: |
           cd backend
-          # 检查spec文件是否存在
-          if [ ! -f "build_mac.spec" ]; then
-            echo "错误：build_mac.spec 文件不存在！"
-            exit 1
-          fi
-          # 核心：加--target-arch universal2 打包通用架构
-          pyinstaller build_mac.spec --clean --noconfirm --target-arch universal2 || { echo "后端打包失败！"; exit 1; }
-          # 检查打包产物
-          if [ ! -f "dist/backend_server" ]; then
-            echo "错误：未生成backend_server可执行文件！"
-            exit 1
-          fi
-          # 验证架构（可选，输出日志查看是否为universal2）
-          lipo -info dist/backend_server
-          cd ..
+          pyinstaller build_mac.spec --clean --noconfirm
 
-      - name: 制作发布包
+      - name: Create Package
         run: |
-          PACKAGE_NAME="simple-web-package-mac-${{ steps.set_version.outputs.VERSION }}"
-          mkdir -p $PACKAGE_NAME
-          # 复制后端可执行文件
-          cp backend/dist/backend_server $PACKAGE_NAME/
-          chmod +x $PACKAGE_NAME/backend_server
-          # 复制前端静态文件
-          cp -r frontend/dist $PACKAGE_NAME/frontend
-          # 编写启动脚本（兼容中文/空格路径）
-          cat > $PACKAGE_NAME/启动服务.sh << 'EOF'
+          mkdir simple-web-package-mac
+
+          cp backend/dist/backend_server simple-web-package-mac/
+          chmod +x simple-web-package-mac/backend_server
+
+          cp -r frontend/dist simple-web-package-mac/frontend
+
+          cat > simple-web-package-mac/start.command << 'EOF'
           #!/bin/bash
-          SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-          cd "$SCRIPT_DIR"
-          echo "正在启动玻注预约系统...（支持Intel/M1/M2/M3/M4）"
+          DIR="$( cd "$( dirname "$0" )" && pwd )"
+          cd "$DIR"
+
+          xattr -dr com.apple.quarantine backend_server 2>/dev/null
+
+          chmod +x backend_server
           ./backend_server
-          if [ $? -ne 0 ]; then
-            echo "服务启动失败，可尝试终端执行：arch -x86_64 ./backend_server"
-            read -p "按任意键退出..."
-            exit 1
-          fi
-          EOF
-          chmod +x $PACKAGE_NAME/启动服务.sh
-          # 编写使用说明
-          cat > $PACKAGE_NAME/使用说明.txt << EOF
-          玻注预约系统 - Mac通用版 ${{ steps.set_version.outputs.VERSION }}
-          支持：Intel芯片Mac + Apple Silicon(M1/M2/M3/M4)Mac
-          使用方法：
-          1. 双击运行「启动服务.sh」
-          2. 浏览器自动打开系统页面
-          3. 默认账号：admin / 密码：admin123
-          异常解决：若双击失败，打开终端进入包目录，执行：arch -x86_64 ./backend_server
           EOF
 
-      - name: 压缩为ZIP包
-        run: |
-          PACKAGE_NAME="simple-web-package-mac-${{ steps.set_version.outputs.VERSION }}"
-          zip -r $PACKAGE_NAME.zip $PACKAGE_NAME/
+          chmod +x simple-web-package-mac/start.command
 
-      - name: 上传构建产物
+          zip -r simple-web-package-mac.zip simple-web-package-mac
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mac-universal-package-${{ steps.set_version.outputs.VERSION }}
-          path: simple-web-package-mac-${{ steps.set_version.outputs.VERSION }}.zip
+          name: mac-package
+          path: simple-web-package-mac.zip
 
-      - name: 创建GitHub Release（仅Tag推送时）
+      - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          files: simple-web-package-mac-${{ steps.set_version.outputs.VERSION }}.zip
-          name: Release ${{ steps.set_version.outputs.VERSION }}
-          body: |
-            ## 玻注预约系统 Mac【通用版】${{ steps.set_version.outputs.VERSION }}
-            ✅ 支持Intel芯片Mac + Apple Silicon(M1/M2/M3/M4)Mac
-            ✅ 无需Rosetta2转译，双击即可运行
-            � 默认账号：admin / 密码：admin123
+          files: simple-web-package-mac.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
