@@ -18,10 +18,12 @@ jobs:
         run: |
           softwareupdate --install-rosetta --agree-to-license
 
+      # ========== ARM 架构构建（原有逻辑保留） ==========
       - name: Setup Python (ARM)
         uses: actions/setup-python@v5
         with:
           python-version: "3.9"
+          architecture: arm64  # 显式指定 ARM 架构
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -47,18 +49,36 @@ jobs:
           pyinstaller build_mac.spec --clean --noconfirm
           mv dist/backend_server dist/backend_server_arm64
 
+      # ========== Intel 架构构建（关键修改） ==========
+      - name: Install x86_64 Python (Intel)
+        run: |
+          # 安装 Intel 版本的 Python 3.9（通过 pyenv 确保架构正确）
+          brew install pyenv
+          # 强制用 x86_64 架构编译安装 Python
+          arch -x86_64 pyenv install 3.9.19
+          arch -x86_64 pyenv global 3.9.19
+          # 将 x86_64 Python 加入 PATH
+          echo "$(pyenv root)/shims" >> $GITHUB_PATH
+
+      - name: Verify Intel Python Architecture
+        run: |
+          # 验证 Python 是 x86_64 架构
+          arch -x86_64 python3 --version
+          arch -x86_64 python3 -c "import platform; print(platform.machine())"  # 应输出 x86_64
+
       - name: Install Backend Dependencies (Intel)
         run: |
           cd backend
-          arch -x86_64 pip3 install -r requirements.txt
-          arch -x86_64 pip3 install pyinstaller
+          arch -x86_64 python3 -m pip install -r requirements.txt
+          arch -x86_64 python3 -m pip install pyinstaller
 
       - name: Build Backend Intel
         run: |
           cd backend
-          arch -x86_64 pyinstaller build_mac.spec --clean --noconfirm
+          arch -x86_64 python3 -m PyInstaller build_mac.spec --clean --noconfirm
           mv dist/backend_server dist/backend_server_x86_64
 
+      # ========== 打包和上传逻辑（原有保留） ==========
       - name: Package ARM
         run: |
           mkdir simple-web-package-mac-arm64
@@ -100,7 +120,8 @@ jobs:
           xattr -dr com.apple.quarantine backend_server 2>/dev/null
           chmod +x backend_server
 
-          ./backend_server
+          # 强制用 x86_64 架构运行
+          arch -x86_64 ./backend_server
           EOF
 
           chmod +x simple-web-package-mac-x86_64/start.command
