@@ -222,19 +222,26 @@ class DatabaseCompatibilityHandler:
         return issues
     
     def apply_safe_fixes(self, issues: List[Dict]) -> bool:
-        """应用安全修复"""
+        """应用安全修复 - 按优先级顺序处理"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
+            # 优先级1: 先添加缺失字段（必须在其他修复之前）
             for issue in issues:
                 if issue['type'] == 'missing_fields':
                     self.fix_missing_fields(cursor, issue['fields'])
-                elif issue['type'] == 'vision_field_types':
+            
+            # 优先级2: 修复视力字段类型
+            for issue in issues:
+                if issue['type'] == 'vision_field_types':
                     self.fix_vision_field_types_safe(cursor, issue['fields'])
                     # 对于appointment表的FLOAT字段，需要重建表结构
                     self.fix_appointment_vision_fields(cursor, issue['fields'])
-                elif issue['type'] == 'data_integrity':
+            
+            # 优先级3: 修复数据完整性问题
+            for issue in issues:
+                if issue['type'] == 'data_integrity':
                     self.fix_data_integrity_issues(cursor, issue['issues'])
             
             conn.commit()
