@@ -684,9 +684,10 @@ const Patients: React.FC = () => {
           <Button icon={<DownloadOutlined />} onClick={handleExport}>
             导出
           </Button>
-          <Button icon={<UploadOutlined />} onClick={() => setIsImportModalOpen(true)}>
+          {/* 批量导入功能暂时隐藏，下个版本发布 */}
+          {/* <Button icon={<UploadOutlined />} onClick={() => setIsImportModalOpen(true)}>
             批量导入
-          </Button>
+          </Button> */}
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
             添加患者
           </Button>
