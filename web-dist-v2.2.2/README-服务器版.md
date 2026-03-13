@@ -41,7 +41,12 @@ chmod +x *.sh
 #### 手动启动
 ```bash
 cd backend
+
+# 方法1：直接使用 uvicorn（推荐）
 python3 -m uvicorn main:app --host 0.0.0.0 --port 8031
+
+# 方法2：使用生产启动脚本
+python3 run_server_production.py
 ```
 
 ### 访问地址
