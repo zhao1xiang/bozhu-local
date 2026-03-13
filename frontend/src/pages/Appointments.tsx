@@ -594,6 +594,8 @@ const Appointments: React.FC = () => {
       // 确保视力值始终是字符串类型
       pre_op_vision_left: values.pre_op_vision_left ? String(values.pre_op_vision_left) : '',
       pre_op_vision_right: values.pre_op_vision_right ? String(values.pre_op_vision_right) : '',
+      pre_op_vision_left_corrected: values.pre_op_vision_left_corrected ? String(values.pre_op_vision_left_corrected) : '',
+      pre_op_vision_right_corrected: values.pre_op_vision_right_corrected ? String(values.pre_op_vision_right_corrected) : '',
       treatment_phase: values.treatment_phase,
       blood_pressure: values.blood_pressure,
       blood_sugar: values.blood_sugar,
