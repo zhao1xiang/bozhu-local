@@ -1,6 +1,7 @@
 """
 简洁版 Web 服务器
 启动后端 + 提供前端静态文件 + 自动打开浏览器
+包含自动数据库迁移功能
 """
 import sys
 import os
@@ -9,6 +10,8 @@ import threading
 import webbrowser
 import traceback
 import logging
+import sqlite3
+import shutil
 from datetime import datetime
 
 def setup_logging():
@@ -46,6 +49,153 @@ def setup_logging():
     logger.info("=" * 60)
     
     return logger
+
+# ==================== 自动数据库迁移功能 ====================
+
+def backup_database_silent(db_path):
+    """静默备份数据库"""
+    if not os.path.exists(db_path):
+        return False
+    
+    backup_path = f"{db_path}.backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    try:
+        shutil.copy2(db_path, backup_path)
+        logging.info(f"数据库已备份: {backup_path}")
+        return True
+    except Exception as e:
+        logging.error(f"数据库备份失败: {e}")
+        return False
+
+def column_exists_check(cursor, table_name, column_name):
+    """检查列是否存在"""
+    try:
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns = [row[1] for row in cursor.fetchall()]
+        return column_name in columns
+    except Exception as e:
+        logging.error(f"检查列失败 {table_name}.{column_name}: {e}")
+        return False
+
+def add_column_safe_exec(cursor, table_name, column_name, column_type, default_value="", description=""):
+    """安全地添加列（如果不存在）"""
+    if column_exists_check(cursor, table_name, column_name):
+        logging.debug(f"字段已存在，跳过: {table_name}.{column_name}")
+        return False
+    
+    try:
+        if default_value:
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type} DEFAULT {default_value}")
+        else:
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+        logging.info(f"✓ 添加字段: {table_name}.{column_name} ({description})")
+        return True
+    except Exception as e:
+        logging.error(f"✗ 添加字段失败 {table_name}.{column_name}: {e}")
+        return False
+
+def auto_migrate_on_startup(db_path, logger):
+    """启动时自动迁移数据库"""
+    if not os.path.exists(db_path):
+        logger.warning(f"数据库文件不存在: {db_path}")
+        return False
+    
+    logger.info("=" * 60)
+    logger.info("开始自动数据库迁移检查...")
+    logger.info("=" * 60)
+    
+    changes_made = 0
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # 定义需要的字段
+        migrations = {
+            'patient': [
+                ('medical_card_number', 'VARCHAR', '', '就诊卡号'),
+                ('remarks', 'TEXT', '', '备注'),
+                ('is_deleted', 'BOOLEAN', '0', '软删除标记'),
+            ],
+            'appointment': [
+                ('attending_doctor', 'VARCHAR', '', '管床医生'),
+                ('virus_report', 'VARCHAR', '', '病毒报告'),
+                ('blood_sugar', 'VARCHAR', '', '血糖'),
+                ('blood_pressure', 'VARCHAR', '', '血压'),
+                ('left_eye_pressure', 'VARCHAR', '', '左眼压'),
+                ('right_eye_pressure', 'VARCHAR', '', '右眼压'),
+                ('eye_wash_result', 'VARCHAR', '', '冲眼结果'),
+                ('time_slot', 'TEXT', '', '时间段'),
+            ]
+        }
+        
+        # 检查是否需要迁移
+        needs_migration = False
+        for table_name, fields in migrations.items():
+            for field_info in fields:
+                field_name = field_info[0]
+                if not column_exists_check(cursor, table_name, field_name):
+                    needs_migration = True
+                    break
+            if needs_migration:
+                break
+        
+        # 如果需要迁移，先备份
+        if needs_migration:
+            logger.info("检测到需要升级数据库结构")
+            if backup_database_silent(db_path):
+                logger.info("数据库备份成功，开始升级...")
+            else:
+                logger.warning("数据库备份失败，但继续升级...")
+        else:
+            logger.info("数据库结构已是最新，无需升级")
+            conn.close()
+            return True
+        
+        # 执行迁移
+        for table_name, fields in migrations.items():
+            logger.info(f"检查表: {table_name}")
+            for field_info in fields:
+                field_name, field_type, default_value, description = field_info
+                if add_column_safe_exec(cursor, table_name, field_name, field_type, default_value, description):
+                    changes_made += 1
+        
+        # 提交更改
+        conn.commit()
+        
+        # 验证迁移
+        logger.info("验证迁移结果...")
+        all_ok = True
+        for table_name, fields in migrations.items():
+            for field_info in fields:
+                field_name = field_info[0]
+                if not column_exists_check(cursor, table_name, field_name):
+                    logger.error(f"验证失败: {table_name}.{field_name} 不存在")
+                    all_ok = False
+        
+        if all_ok:
+            logger.info("=" * 60)
+            logger.info(f"✓ 数据库迁移成功! 新增 {changes_made} 个字段")
+            logger.info("=" * 60)
+            conn.close()
+            return True
+        else:
+            logger.error("=" * 60)
+            logger.error("✗ 数据库迁移验证失败")
+            logger.error("=" * 60)
+            conn.close()
+            return False
+        
+    except Exception as e:
+        logger.error("=" * 60)
+        logger.error(f"数据库迁移失败: {e}")
+        logger.error("=" * 60)
+        logger.error(traceback.format_exc())
+        try:
+            conn.rollback()
+            conn.close()
+        except:
+            pass
+        return False
 
 def find_available_port(start_port=8000, max_attempts=10):
     """查找可用端口"""
@@ -137,6 +287,17 @@ def main():
         # 检查数据库文件
         if os.path.exists("database.db"):
             logger.info(f"✓ 找到数据库文件: database.db")
+            
+            # 自动数据库迁移
+            logger.info("检查数据库结构...")
+            try:
+                if auto_migrate_on_startup("database.db", logger):
+                    logger.info("数据库检查完成")
+                else:
+                    logger.warning("数据库迁移有问题，但继续启动...")
+            except Exception as e:
+                logger.warning(f"数据库迁移检查失败: {e}")
+                logger.warning("继续启动服务器...")
         else:
             logger.warning(f"未找到数据库文件，将自动创建")
         
@@ -161,12 +322,14 @@ def main():
             sys.exit(1)
         
         # 服务器配置
-        host = "127.0.0.1"
+        host = "0.0.0.0"  # 监听所有网卡，支持局域网访问
         port = 38125  # 固定端口号
         
         logger.info(f"使用固定端口 {port}")
+        logger.info(f"监听所有网卡 (0.0.0.0)，支持局域网访问")
         
-        url = f"http://{host}:{port}"
+        # 本地访问地址
+        url = f"http://127.0.0.1:{port}"
         
         logger.info(f"🚀 准备启动服务器: {url}")
         logger.info(f"📁 前端目录: {frontend_dir}")
@@ -218,7 +381,11 @@ def main():
         logger.error("详细错误信息：")
         logger.error(traceback.format_exc())
         logger.error("=" * 60)
-        input("按回车键退出...")
+        # PyInstaller 打包后不能使用 input()
+        try:
+            input("按回车键退出...")
+        except:
+            time.sleep(10)  # 如果 input() 失败，等待 10 秒
         sys.exit(1)
 
 if __name__ == "__main__":

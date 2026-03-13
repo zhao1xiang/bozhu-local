@@ -210,6 +210,11 @@ const PrintCenter: React.FC = () => {
           .overlay-text.time-9 {
             font-size: 20.9px !important; /* 12px * 1.745 */
           }
+          
+          /* 复诊电话样式 - 调整字体大小和位置 */
+          span[style*="bottom: 1.2%"] {
+            font-size: 24.4px !important; /* 14px * 1.745 */
+          }
         }
       `;
       document.head.appendChild(style);
@@ -384,9 +389,9 @@ const PrintCenter: React.FC = () => {
                 {/* 联系电话 - 显示在左下角"本院复诊提醒电话："后面 */}
                 <span style={{ 
                   position: 'absolute', 
-                  bottom: '1.8%',  // 再往下调整一点
+                  bottom: '1.2%',  // 从 1.8% 调整为 1.2%，往下移动
                   left: '32%',     // 在"本院复诊提醒电话："后面
-                  fontSize: '13px', 
+                  fontSize: '14px', // 从 16px 调整为 14px，稍微小一点
                   fontWeight: 'bold', 
                   color: '#000'
                 }}>

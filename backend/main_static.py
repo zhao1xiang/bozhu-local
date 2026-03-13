@@ -58,24 +58,16 @@ if os.path.exists(frontend_dir):
     
     # 提供根目录的静态文件（logo.png, print-template.png 等）
     @app.get("/{filename}")
-    async def serve_root_files(filename: str):
-        # 只处理根目录的静态文件
-        static_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.woff', '.woff2', '.ttf', '.eot']
+    async def serve_static_files(filename: str):
+        # 只处理静态文件
+        static_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', 
+                           '.woff', '.woff2', '.ttf', '.eot', '.json', '.xml', '.txt']
         if any(filename.endswith(ext) for ext in static_extensions):
             file_path = os.path.join(frontend_dir, filename)
             if os.path.exists(file_path):
                 return FileResponse(file_path)
-        # 不是静态文件，返回 404 让其他路由处理
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404)
-    
-    # 为 SPA 路由提供 index.html（只匹配特定的前端路由）
-    @app.get("/app/{full_path:path}")
-    async def spa_routes(full_path: str):
-        return FileResponse(f"{frontend_dir}/index.html")
-    
-    @app.get("/login")
-    async def login_page():
+        
+        # 不是静态文件，返回 index.html（SPA 路由）
         return FileResponse(f"{frontend_dir}/index.html")
 else:
     @app.get("/")

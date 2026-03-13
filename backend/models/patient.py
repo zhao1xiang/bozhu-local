@@ -12,10 +12,10 @@ class PatientBase(SQLModel):
     diagnosis_other: Optional[str] = Field(default=None, description="诊断其他说明")
     drug_type: Optional[str] = None
     drug_type_other: Optional[str] = Field(default=None, description="药物其他说明")
-    left_vision: Optional[float] = Field(default=None, description="左眼裸眼视力")
-    right_vision: Optional[float] = Field(default=None, description="右眼裸眼视力")
-    left_vision_corrected: Optional[float] = Field(default=None, description="左眼矫正视力")
-    right_vision_corrected: Optional[float] = Field(default=None, description="右眼矫正视力")
+    left_vision: Optional[str] = Field(default=None, description="左眼裸眼视力")
+    right_vision: Optional[str] = Field(default=None, description="右眼裸眼视力")
+    left_vision_corrected: Optional[str] = Field(default=None, description="左眼矫正视力")
+    right_vision_corrected: Optional[str] = Field(default=None, description="右眼矫正视力")
     left_eye: bool = False
     right_eye: bool = False
     patient_type: Optional[str] = Field(default=None, description="患者类型") # 初治/经治

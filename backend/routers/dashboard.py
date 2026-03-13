@@ -82,46 +82,50 @@ def get_injection_trend(dimension: str = "month", session: Session = Depends(get
 
 @router.get("/charts/reinjection-rate")
 def get_reinjection_rate(session: Session = Depends(get_session)):
-    # Logic: For each phase (强化期/巩固期), count patients who have completed a needle 
-    # and have a subsequent needle (completed or scheduled).
-    
+    """
+    计算约针率：
+    - 分母：在该阶段完成过注药，且需要约下一针的患者数
+    - 分子：在该阶段完成过注药，且已经约了下一针的患者数
+    """
     results = {}
+    
     for phase in ["强化期", "巩固期"]:
-        # Total patients who had at least one injection in this phase (exclude deleted)
-        total_p_query = select(func.count(func.distinct(Appointment.patient_id))).where(
+        # 找到在该阶段完成过注药的所有患者及其最高针次
+        completed_query = select(
+            Appointment.patient_id, 
+            func.max(Appointment.injection_count).label('max_count')
+        ).where(
             Appointment.is_deleted == False,
             Appointment.treatment_phase == phase,
             Appointment.status == 'completed'
-        )
-        total_patients = session.exec(total_p_query).one()
+        ).group_by(Appointment.patient_id)
         
-        if total_patients == 0:
+        completed_in_phase = session.exec(completed_query).all()
+        
+        if not completed_in_phase:
             results[phase] = 0
             continue
             
-        # Patients in this phase who have a NEXT injection (injection_count > 1 for that phase or just count distinct)
-        # More robust: Find patients who finished needle N and have needle N+1 scheduled/completed
-        # For simplicity in this demo: count patients who have more than 1 appointment in this phase OR have an appointment in the NEXT phase
+        total_patients = len(completed_in_phase)
+        patients_with_next_appointment = 0
         
-        # Let's use a simpler logic for the "rate of booking next":
-        # Patients whose LATEST injection was 'completed' but they HAVE a 'scheduled' one in the future
-        # OR patients who have multiple completed injections.
+        for patient_id, max_injection_count in completed_in_phase:
+            # 检查该患者是否有下一针的预约（injection_count > max_injection_count）
+            next_appointment_query = select(Appointment).where(
+                Appointment.patient_id == patient_id,
+                Appointment.injection_count > max_injection_count,
+                Appointment.is_deleted == False,
+                Appointment.status.in_(['scheduled', 'completed'])
+            ).limit(1)
+            
+            next_appointment = session.exec(next_appointment_query).first()
+            
+            if next_appointment:
+                patients_with_next_appointment += 1
         
-        # Actually, the user defined: 分母为患者数，分子为约了下一针的数量
-        # If we count all patients who ever had an injection, how many have a future one?
-        
-        sub_query = select(func.count(func.distinct(Appointment.patient_id))).where(
-            Appointment.is_deleted == False,
-            Appointment.treatment_phase == phase,
-            Appointment.status == 'scheduled'
-        )
-        scheduled_patients = session.exec(sub_query).one()
-        
-        # Or even better: patients who HAVE completed an injection AND HAVE another one scheduled/completed later
-        # For a truly informative "约针率"
-        rate = round((scheduled_patients / total_patients) * 100, 1) if total_patients > 0 else 0
+        rate = round((patients_with_next_appointment / total_patients) * 100, 1) if total_patients > 0 else 0
         results[phase] = rate
-        
+    
     return results
 
 @router.get("/charts/distribution")

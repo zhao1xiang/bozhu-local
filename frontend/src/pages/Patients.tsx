@@ -784,10 +784,10 @@ const Patients: React.FC = () => {
             <div style={{ marginBottom: 8, fontWeight: 500 }}>裸眼视力</div>
             <Space>
               <Form.Item name="left_vision" label="左眼" style={{ marginBottom: 0 }}>
-                <InputNumber step={0.01} placeholder="例: 0.5" />
+                <Input placeholder="例: 0.5 或 手动" />
               </Form.Item>
               <Form.Item name="right_vision" label="右眼" style={{ marginBottom: 0 }}>
-                <InputNumber step={0.01} placeholder="例: 0.5" />
+                <Input placeholder="例: 0.5 或 手动" />
               </Form.Item>
             </Space>
           </div>
@@ -795,10 +795,10 @@ const Patients: React.FC = () => {
             <div style={{ marginBottom: 8, fontWeight: 500 }}>矫正视力</div>
             <Space>
               <Form.Item name="left_vision_corrected" label="左眼" style={{ marginBottom: 0 }}>
-                <InputNumber step={0.01} placeholder="例: 0.8" />
+                <Input placeholder="例: 0.8 或 手动" />
               </Form.Item>
               <Form.Item name="right_vision_corrected" label="右眼" style={{ marginBottom: 0 }}>
-                <InputNumber step={0.01} placeholder="例: 0.8" />
+                <Input placeholder="例: 0.8 或 手动" />
               </Form.Item>
             </Space>
           </div>

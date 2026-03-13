@@ -164,11 +164,11 @@ async def import_patients(file: UploadFile = File(...), session: Session = Depen
                 drug_type = str(row[6]).strip() if row[6] else None
                 drug_type_other = str(row[7]).strip() if row[7] else None
                 
-                # 视力数据
-                left_vision = float(row[8]) if row[8] and str(row[8]).strip() else None
-                right_vision = float(row[9]) if row[9] and str(row[9]).strip() else None
-                left_vision_corrected = float(row[10]) if row[10] and str(row[10]).strip() else None
-                right_vision_corrected = float(row[11]) if row[11] and str(row[11]).strip() else None
+                # 视力数据（改为字符串类型）
+                left_vision = str(row[8]).strip() if row[8] and str(row[8]).strip() else None
+                right_vision = str(row[9]).strip() if row[9] and str(row[9]).strip() else None
+                left_vision_corrected = str(row[10]).strip() if row[10] and str(row[10]).strip() else None
+                right_vision_corrected = str(row[11]).strip() if row[11] and str(row[11]).strip() else None
                 
                 # 注射眼别
                 left_eye_str = str(row[12]).strip() if row[12] else "否"

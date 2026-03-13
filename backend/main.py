@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import create_db_and_tables
 from routers import patients_router, appointments_router, data_dictionary_router, system_settings, follow_ups, dashboard, auth
 from models.user import User
+from models.system_setting import SystemSetting
 from security import get_password_hash
 from sqlmodel import Session, select
 from database import engine
@@ -44,6 +45,23 @@ def on_startup():
             session.add(admin_user)
             session.commit()
             print("Default admin user created.")
+        
+        # Initialize default system settings if not exists
+        default_settings = [
+            ('reminder_days_advance', '3', '提前提醒天数'),
+            ('injection_weekday', '1', '玻注日（1-7 表示周一到周日，可多选，逗号分隔）'),
+            ('injection_interval_first_4', '30', '前4针注射间隔（天）'),
+            ('print_phone_number', '', '打印页面显示的联系电话'),
+        ]
+        
+        for key, default_value, description in default_settings:
+            setting = session.exec(select(SystemSetting).where(SystemSetting.key == key)).first()
+            if not setting:
+                new_setting = SystemSetting(key=key, value=default_value, description=description)
+                session.add(new_setting)
+                print(f"Created default system setting: {key} = {default_value}")
+        
+        session.commit()
 
 app.include_router(patients_router, prefix="/api")
 app.include_router(appointments_router, prefix="/api")

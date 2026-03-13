@@ -1,9 +1,34 @@
 import axios from 'axios';
 
 // 支持环境变量配置 API 地址
-// Tauri 桌面版使用 127.0.0.1:38125/api
-// Web 版可以通过 VITE_API_URL 环境变量配置（应包含 /api 前缀）
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:38125/api';
+// 本地部署版使用 127.0.0.1:38125/api
+// 服务器版使用相对路径 /api（通过 Nginx 等反向代理）
+// 局域网部署版使用当前 IP:8031/api
+// 可以通过 VITE_API_URL 环境变量配置
+const API_BASE_URL = import.meta.env.VITE_API_URL || (() => {
+  const hostname = window.location.hostname;
+  const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+  const isProduction = import.meta.env.MODE === 'production';
+  
+  // 本地开发或 localhost 访问 -> 使用 127.0.0.1:38125
+  if (isLocalhost) {
+    return 'http://127.0.0.1:38125/api';
+  }
+  
+  // 生产环境且不是 localhost
+  if (isProduction) {
+    // 如果是局域网 IP（192.168.x.x, 10.x.x.x, 172.16-31.x.x）
+    if (hostname.match(/^(192\.168|10\.|172\.(1[6-9]|2[0-9]|3[01]))\./)) {
+      // 局域网 IP 访问 -> 使用当前 IP:38125（本地版端口）
+      return `http://${hostname}:38125/api`;
+    }
+    // 其他情况（域名、公网 IP）-> 使用相对路径（通过 Nginx 反向代理）
+    return '/api';
+  }
+  
+  // 开发环境 -> 使用相对路径
+  return '/api';
+})();
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

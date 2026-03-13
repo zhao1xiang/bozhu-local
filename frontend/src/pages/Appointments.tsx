@@ -143,7 +143,8 @@ const Appointments: React.FC = () => {
         appointment_date: date,
         follow_up_date: date,
         injection_count: injectionCount,
-        treatment_phase: injectionCount > 4 ? '巩固期' : '强化期'
+        treatment_phase: injectionCount > 4 ? '巩固期' : '强化期',
+        time_slot: '上午'
       });
       
       // 计算下一针的日期
@@ -395,7 +396,8 @@ const Appointments: React.FC = () => {
           appointment_date: firstInjectionDate, 
           follow_up_date: firstInjectionDate, 
           injection_count: nextInjectionCount,
-          treatment_phase: treatmentPhase
+          treatment_phase: treatmentPhase,
+          time_slot: '上午'
         }
       ]
     };
@@ -411,8 +413,17 @@ const Appointments: React.FC = () => {
         // 带入患者的视力信息
         initialValues.pre_op_vision_left = patient.left_vision;
         initialValues.pre_op_vision_right = patient.right_vision;
+        initialValues.pre_op_vision_left_corrected = patient.left_vision_corrected;
+        initialValues.pre_op_vision_right_corrected = patient.right_vision_corrected;
         
-        setShowBatchHint(patient.drug_type === '法瑞西单抗');
+        // 检查药物是否包含法瑞西单抗（支持多选和字符串格式）
+        let drugTypes: string[] = [];
+        if (Array.isArray(patient.drug_type)) {
+          drugTypes = patient.drug_type;
+        } else if (typeof patient.drug_type === 'string') {
+          drugTypes = patient.drug_type.split(',').map(s => s.trim());
+        }
+        setShowBatchHint(drugTypes.includes('法瑞西单抗'));
       } else {
         setShowBatchHint(false);
       }
@@ -423,6 +434,25 @@ const Appointments: React.FC = () => {
     form.setFieldsValue(initialValues);
     setEditingId(null);
     setIsModalOpen(true);
+    
+    // 在表单设置完成后，再检查是否显示批量预约提示
+    if (preSelectedPatientId) {
+      const listToUse = patientsList || patients;
+      const patient = listToUse.find(p => p.id === preSelectedPatientId);
+      if (patient) {
+        // 检查药物是否包含法瑞西单抗（支持多选和字符串格式）
+        let drugTypes: string[] = [];
+        if (Array.isArray(patient.drug_type)) {
+          drugTypes = patient.drug_type;
+        } else if (typeof patient.drug_type === 'string') {
+          drugTypes = patient.drug_type.split(',').map(s => s.trim());
+        }
+        console.log('Patient drug types:', drugTypes);
+        const hasFarexidanab = drugTypes.includes('法瑞西单抗');
+        console.log('Has 法瑞西单抗:', hasFarexidanab);
+        setShowBatchHint(hasFarexidanab);
+      }
+    }
   };
 
   const handleEdit = (record: Appointment) => {
@@ -518,21 +548,35 @@ const Appointments: React.FC = () => {
         follow_up_date: firstInjectionDate,
         doctor: lastDoctor,
         cost_type: lastCostType,
-        // 带入患者的视力信息
+        // 带入患者的视力信息（包括矫正视力）
         pre_op_vision_left: patient.left_vision,
         pre_op_vision_right: patient.right_vision,
-        // 重置预约列表为单个预约
+        pre_op_vision_left_corrected: patient.left_vision_corrected,
+        pre_op_vision_right_corrected: patient.right_vision_corrected,
+        // 重置预约列表为单个预约，默认时间段为上午
         appointment_list: [{
           appointment_date: firstInjectionDate,
           follow_up_date: firstInjectionDate,
           injection_count: nextInjectionCount,
-          treatment_phase: treatmentPhase
+          treatment_phase: treatmentPhase,
+          time_slot: '上午'
         }]
       });
       
       console.log('Form values after setting:', form.getFieldsValue());
       console.log('=== handlePatientChange END ===');
-      setShowBatchHint(patient.drug_type === '法瑞西单抗');
+      
+      // 检查药物是否包含法瑞西单抗（支持多选和字符串格式）
+      let drugTypes: string[] = [];
+      if (Array.isArray(patient.drug_type)) {
+        drugTypes = patient.drug_type;
+      } else if (typeof patient.drug_type === 'string') {
+        drugTypes = patient.drug_type.split(',').map(s => s.trim());
+      }
+      console.log('Patient change - drug types:', drugTypes);
+      const hasFarexidanab = drugTypes.includes('法瑞西单抗');
+      console.log('Patient change - has 法瑞西单抗:', hasFarexidanab);
+      setShowBatchHint(hasFarexidanab);
     }
   };
 
@@ -544,7 +588,7 @@ const Appointments: React.FC = () => {
       patient_id: values.patient_id,
       injection_number: values.injection_number,
       eye: values.eye,
-      drug_name: values.drug_name,
+      drug_name: Array.isArray(values.drug_name) ? values.drug_name.join(',') : values.drug_name,
       cost_type: values.cost_type,
       doctor: values.doctor,
       pre_op_vision_left: values.pre_op_vision_left,
@@ -986,7 +1030,8 @@ const Appointments: React.FC = () => {
                             appointment_date: nextDate,
                             follow_up_date: nextDate,
                             injection_count: nextInjectionCount,
-                            treatment_phase: nextInjectionCount > 4 ? '巩固期' : '强化期'
+                            treatment_phase: nextInjectionCount > 4 ? '巩固期' : '强化期',
+                            time_slot: '上午'
                           });
                         } else {
                           const base = dayjs();
@@ -995,7 +1040,8 @@ const Appointments: React.FC = () => {
                             appointment_date: nextDate,
                             follow_up_date: nextDate,
                             injection_count: 1,
-                            treatment_phase: '强化期'
+                            treatment_phase: '强化期',
+                            time_slot: '上午'
                           });
                         }
                       }} block icon={<PlusOutlined />}>
@@ -1110,8 +1156,13 @@ const Appointments: React.FC = () => {
             <Col span={8}>
               <Form.Item name="drug_name" label="药品名称">
                 <Select
+                  mode="multiple"
                   placeholder="请选择药品"
-                  onChange={(val) => setShowBatchHint(val === '法瑞西单抗')}
+                  onChange={(val) => {
+                    // 支持多选，检查是否包含法瑞西单抗
+                    const drugTypes = Array.isArray(val) ? val : [val];
+                    setShowBatchHint(drugTypes.includes('法瑞西单抗'));
+                  }}
                   options={drugs}
                 />
               </Form.Item>
