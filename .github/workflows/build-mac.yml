@@ -1,4 +1,4 @@
-name: Build Mac Universal Package
+name: Build Mac Package
 
 on:
   workflow_dispatch:
@@ -7,16 +7,17 @@ on:
       - "v*"
 
 jobs:
-  build-mac-universal:
+  build-mac:
     runs-on: macos-14
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rosetta
-        run: |
-          softwareupdate --install-rosetta --agree-to-license
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -30,82 +31,51 @@ jobs:
           npm run build
           cd ..
 
-      # ========== 关键：安装支持 Universal 2 的 Python 环境 ==========
-      - name: Install Universal Python 3.9
+      - name: Install Backend Dependencies
         run: |
-          # 安装支持 Universal 2 的 Python（通过 conda，避免系统环境干扰）
-          brew install miniforge
-          conda create -n universal_env python=3.9 -y
-          conda init bash
-          source ~/.bashrc
-          conda activate universal_env
-          # 验证 Python 架构（应显示 universal2）
-          python -c "import platform; print('Python arch:', platform.machine())"
-          lipo -info $(which python)
-
-      # ========== 安装依赖（强制 Universal 编译） ==========
-      - name: Install Universal Dependencies
-        run: |
-          source ~/.bashrc
-          conda activate universal_env
           cd backend
-          # 强制 pip 安装 universal 版本依赖
-          pip install --no-binary :all: --compile -r requirements.txt
-          pip install pyinstaller==5.13.2  # 固定版本避免兼容性问题
+          pip install -r requirements.txt
+          pip install pyinstaller
 
-      # ========== 打包 Universal 2 二进制 ==========
-      - name: Build Universal 2 Backend
+      - name: Build Backend
         run: |
-          source ~/.bashrc
-          conda activate universal_env
           cd backend
-          # 修改 spec 文件：强制生成 Universal 2 包（关键！）
-          sed -i '' 's|EXE(|EXE(\n    arch="universal2",|g' build_mac.spec
-          # 执行打包
           pyinstaller build_mac.spec --clean --noconfirm
-          # 验证产物架构（应显示 x86_64 arm64）
-          lipo -info dist/backend_server
 
-      # ========== 打包通用安装包 ==========
-      - name: Package Universal App
+      - name: Create Package
         run: |
-          mkdir simple-web-package-mac-universal
+          mkdir simple-web-package-mac
 
-          # 复制通用二进制和前端文件
-          cp backend/dist/backend_server simple-web-package-mac-universal/backend_server
-          chmod +x simple-web-package-mac-universal/backend_server
-          cp -r frontend/dist simple-web-package-mac-universal/frontend
+          cp backend/dist/backend_server simple-web-package-mac/
+          chmod +x simple-web-package-mac/backend_server
 
-          # 通用启动脚本（无需指定架构，系统自动适配）
-          cat > simple-web-package-mac-universal/start.command << 'EOF'
+          cp -r frontend/dist simple-web-package-mac/frontend
+
+          cat > simple-web-package-mac/start.command << 'EOF'
           #!/bin/bash
           DIR="$( cd "$( dirname "$0" )" && pwd )"
           cd "$DIR"
 
-          # 清除隔离属性
           xattr -dr com.apple.quarantine backend_server 2>/dev/null
-          chmod +x backend_server
 
-          # 自动适配架构运行
+          chmod +x backend_server
           ./backend_server
           EOF
 
-          chmod +x simple-web-package-mac-universal/start.command
+          chmod +x simple-web-package-mac/start.command
 
-          # 压缩包
-          zip -r simple-web-package-mac-universal.zip simple-web-package-mac-universal
+          zip -r simple-web-package-mac.zip simple-web-package-mac
 
-      # ========== 上传产物 & 创建 Release ==========
-      - name: Upload Universal Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mac-universal2
-          path: simple-web-package-mac-universal.zip
+          name: mac-package
+          path: simple-web-package-mac.zip
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: simple-web-package-mac-universal.zip
+          files: simple-web-package-mac.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

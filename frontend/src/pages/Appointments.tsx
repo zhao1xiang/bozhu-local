@@ -591,8 +591,9 @@ const Appointments: React.FC = () => {
       drug_name: Array.isArray(values.drug_name) ? values.drug_name.join(',') : values.drug_name,
       cost_type: values.cost_type,
       doctor: values.doctor,
-      pre_op_vision_left: values.pre_op_vision_left,
-      pre_op_vision_right: values.pre_op_vision_right,
+      // 确保视力值始终是字符串类型
+      pre_op_vision_left: values.pre_op_vision_left ? String(values.pre_op_vision_left) : '',
+      pre_op_vision_right: values.pre_op_vision_right ? String(values.pre_op_vision_right) : '',
       treatment_phase: values.treatment_phase,
       blood_pressure: values.blood_pressure,
       blood_sugar: values.blood_sugar,
@@ -1112,12 +1113,12 @@ const Appointments: React.FC = () => {
               <Row gutter={16}>
                 <Col span={12}>
                   <Form.Item name="pre_op_vision_left" label="左眼" style={{ marginBottom: 0 }}>
-                    <InputNumber step={0.01} style={{ width: '100%' }} placeholder="例: 0.5" />
+                    <Input style={{ width: '100%' }} placeholder="例: 0.5 或 手动/光感" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
                   <Form.Item name="pre_op_vision_right" label="右眼" style={{ marginBottom: 0 }}>
-                    <InputNumber step={0.01} style={{ width: '100%' }} placeholder="例: 0.5" />
+                    <Input style={{ width: '100%' }} placeholder="例: 0.5 或 手动/光感" />
                   </Form.Item>
                 </Col>
               </Row>
@@ -1127,12 +1128,12 @@ const Appointments: React.FC = () => {
               <Row gutter={16}>
                 <Col span={12}>
                   <Form.Item name="pre_op_vision_left_corrected" label="左眼" style={{ marginBottom: 0 }}>
-                    <InputNumber step={0.01} style={{ width: '100%' }} placeholder="例: 0.8" />
+                    <Input style={{ width: '100%' }} placeholder="例: 0.8 或 手动/光感" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
                   <Form.Item name="pre_op_vision_right_corrected" label="右眼" style={{ marginBottom: 0 }}>
-                    <InputNumber step={0.01} style={{ width: '100%' }} placeholder="例: 0.8" />
+                    <Input style={{ width: '100%' }} placeholder="例: 0.8 或 手动/光感" />
                   </Form.Item>
                 </Col>
               </Row>

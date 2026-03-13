@@ -4,6 +4,9 @@ from database import engine
 from models import Appointment, AppointmentBase
 from typing import List, Optional
 from datetime import date
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
@@ -13,21 +16,58 @@ def get_session():
 
 @router.post("/", response_model=Appointment)
 def create_appointment(appointment: AppointmentBase, session: Session = Depends(get_session)):
-    db_appointment = Appointment.model_validate(appointment)
-    session.add(db_appointment)
-    session.commit()
-    session.refresh(db_appointment)
-    return db_appointment
+    try:
+        db_appointment = Appointment.model_validate(appointment)
+        session.add(db_appointment)
+        session.commit()
+        session.refresh(db_appointment)
+        return db_appointment
+    except Exception as e:
+        import traceback
+        print("创建预约时出错:")
+        print(f"数据: {appointment}")
+        print(f"错误: {e}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=422,
+            detail=f"预约创建失败: {str(e)}"
+        )
 
 @router.post("/batch", response_model=List[Appointment])
 def create_appointments_batch(appointments: List[AppointmentBase], session: Session = Depends(get_session)):
-    db_appointments = [Appointment.model_validate(appt) for appt in appointments]
-    for db_appt in db_appointments:
-        session.add(db_appt)
-    session.commit()
-    for db_appt in db_appointments:
-        session.refresh(db_appt)
-    return db_appointments
+    try:
+        db_appointments = []
+        for i, appt in enumerate(appointments):
+            try:
+                db_appointment = Appointment.model_validate(appt)
+                db_appointments.append(db_appointment)
+            except Exception as e:
+                import traceback
+                print(f"验证第 {i+1} 个预约记录时出错:")
+                print(f"数据: {appt}")
+                print(f"错误: {e}")
+                traceback.print_exc()
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"预约记录 {i+1} 验证失败: {str(e)}"
+                )
+        
+        for db_appt in db_appointments:
+            session.add(db_appt)
+        session.commit()
+        for db_appt in db_appointments:
+            session.refresh(db_appt)
+        return db_appointments
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print("批量创建预约时出错:")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"批量创建预约失败: {str(e)}"
+        )
 
 @router.get("/", response_model=List[Appointment])
 def read_appointments(

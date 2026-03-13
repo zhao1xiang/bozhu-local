@@ -4,7 +4,7 @@ import { message } from 'antd';
 
 interface AuthContextType {
     token: string | null;
-    login: (token: string) => void;
+    login: (token: string, remember?: boolean) => void;
     logout: () => void;
     isAuthenticated: boolean;
 }
@@ -12,11 +12,22 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+    const [token, setToken] = useState<string | null>(() => {
+        // 优先从 localStorage 获取，如果没有则从 sessionStorage 获取
+        return localStorage.getItem('token') || sessionStorage.getItem('token');
+    });
 
     useEffect(() => {
         if (token) {
-            localStorage.setItem('token', token);
+            // 检查 token 是否存储在 localStorage 中（记住登录状态）
+            const isRemembered = localStorage.getItem('token') === token;
+            
+            if (isRemembered) {
+                localStorage.setItem('token', token);
+            } else {
+                sessionStorage.setItem('token', token);
+            }
+            
             // Configure axios interceptor
             const interceptor = apiClient.interceptors.request.use(config => {
                 config.headers.Authorization = `Bearer ${token}`;
@@ -40,15 +51,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             };
         } else {
             localStorage.removeItem('token');
+            sessionStorage.removeItem('token');
         }
     }, [token]);
 
-    const login = (newToken: string) => {
+    const login = (newToken: string, remember: boolean = true) => {
         setToken(newToken);
+        
+        if (remember) {
+            // 记住登录状态，存储到 localStorage
+            localStorage.setItem('token', newToken);
+            sessionStorage.removeItem('token');
+        } else {
+            // 不记住登录状态，存储到 sessionStorage
+            sessionStorage.setItem('token', newToken);
+            localStorage.removeItem('token');
+        }
     };
 
     const logout = () => {
         setToken(null);
+        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         message.info('已退出登录');
     };
 

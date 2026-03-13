@@ -162,6 +162,11 @@ const Patients: React.FC = () => {
       ...values,
       diagnosis: Array.isArray(values.diagnosis) ? values.diagnosis.join(',') : values.diagnosis || '',
       drug_type: Array.isArray(values.drug_type) ? values.drug_type.join(',') : values.drug_type || '',
+      // 确保视力值始终是字符串类型
+      left_vision: values.left_vision ? String(values.left_vision) : '',
+      right_vision: values.right_vision ? String(values.right_vision) : '',
+      left_vision_corrected: values.left_vision_corrected ? String(values.left_vision_corrected) : '',
+      right_vision_corrected: values.right_vision_corrected ? String(values.right_vision_corrected) : '',
     };
     
     try {
@@ -735,7 +740,8 @@ const Patients: React.FC = () => {
               ))}
             </Select>
           </Form.Item>
-          <Form.Item name="diagnosis_other" label="诊断其他说明">
+          {/* 隐藏诊断其他说明字段 - 后端保留，前端隐藏 */}
+          <Form.Item name="diagnosis_other" label="诊断其他说明" style={{ display: 'none' }}>
             <Input placeholder="如有其他诊断，请在此输入" />
           </Form.Item>
           <Form.Item name="drug_type" label="治疗药物">
@@ -749,7 +755,8 @@ const Patients: React.FC = () => {
               ))}
             </Select>
           </Form.Item>
-          <Form.Item name="drug_type_other" label="药物其他说明">
+          {/* 隐藏药物其他说明字段 - 后端保留，前端隐藏 */}
+          <Form.Item name="drug_type_other" label="药物其他说明" style={{ display: 'none' }}>
             <Input placeholder="如有其他药物，请在此输入" />
           </Form.Item>
           <Form.Item name="patient_type" label="患者类型">

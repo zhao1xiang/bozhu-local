@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Input, Button, Card, message, Typography, Alert, Spin } from 'antd';
+import { Form, Input, Button, Card, message, Typography, Alert, Spin, Checkbox } from 'antd';
 import { UserOutlined, LockOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
@@ -12,7 +12,14 @@ const Login: React.FC = () => {
     const [backendReady, setBackendReady] = useState(false);
     const [checkingBackend, setCheckingBackend] = useState(true);
     const navigate = useNavigate();
-    const { login } = useAuth();
+    const { login, isAuthenticated } = useAuth();
+
+    // 如果已登录，自动跳转到主页
+    useEffect(() => {
+        if (isAuthenticated) {
+            navigate('/app/dashboard', { replace: true });
+        }
+    }, [isAuthenticated, navigate]);
 
     // 检测是否在 Tauri 环境（EXE）或应该跳过检测
     const isTauri = () => {
@@ -78,7 +85,8 @@ const Login: React.FC = () => {
                 }
             });
 
-            login(response.data.access_token);
+            // 传递记住状态给 login 函数
+            login(response.data.access_token, values.remember);
             message.success('登录成功');
             navigate('/app/dashboard');
         } catch (error: any) {
@@ -174,6 +182,10 @@ const Login: React.FC = () => {
                         rules={[{ required: true, message: '请输入密码' }]}
                     >
                         <Input.Password prefix={<LockOutlined />} placeholder="密码" />
+                    </Form.Item>
+
+                    <Form.Item name="remember" valuePropName="checked" style={{ marginBottom: 16 }}>
+                        <Checkbox defaultChecked>记住登录状态</Checkbox>
                     </Form.Item>
 
                     <Form.Item>

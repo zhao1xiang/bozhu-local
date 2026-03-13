@@ -6,10 +6,12 @@ import os
 import sqlite3
 import logging
 from datetime import datetime
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.exceptions import HTTPException
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from database import create_db_and_tables, engine
 from routers import patients_router, appointments_router, data_dictionary_router
 from routers.system_settings import router as system_settings_router
@@ -36,7 +38,7 @@ app.add_middleware(
     max_age=3600,
 )
 
-# 注册 API 路由
+# 注册 API 路由（必须在静态文件路由之前）
 app.include_router(patients_router, prefix="/api")
 app.include_router(appointments_router, prefix="/api")
 app.include_router(data_dictionary_router, prefix="/api")
@@ -44,6 +46,11 @@ app.include_router(system_settings_router, prefix="/api")
 app.include_router(follow_ups_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
+
+# 健康检查（在静态文件路由之前）
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "version": "2.2.3-web"}
 
 # 静态文件服务
 frontend_dir = "frontend"
@@ -69,6 +76,16 @@ if os.path.exists(frontend_dir):
         
         # 不是静态文件，返回 index.html（SPA 路由）
         return FileResponse(f"{frontend_dir}/index.html")
+    
+    # SPA 404 处理：对于非 API 请求的 404，返回 index.html
+    @app.exception_handler(404)
+    async def custom_404_handler(request: Request, exc):
+        # 如果是 API 请求，返回 JSON 错误
+        if request.url.path.startswith("/api/"):
+            return {"detail": "Not Found"}
+        
+        # 否则返回 index.html（让前端路由处理）
+        return FileResponse(f"{frontend_dir}/index.html")
 else:
     @app.get("/")
     async def read_root():
@@ -80,99 +97,27 @@ else:
 @app.on_event("startup")
 def on_startup():
     """应用启动时执行"""
-    import shutil
-    import sqlite3
-    from datetime import datetime
-    
     logger.info("")
     logger.info("=" * 60)
-    logger.info("检查数据库结构...")
+    logger.info("🚀 眼科注射预约系统 v2.2.3 启动中...")
     logger.info("=" * 60)
-    
-    db_path = "database.db"
     
     # 创建数据库表
     create_db_and_tables()
     
-    # 如果数据库存在，检查并升级结构
+    # 使用新的数据库兼容性处理模块
+    from database_compatibility import ensure_database_compatibility
+    
+    db_path = "database.db"
     if os.path.exists(db_path):
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            
-            # 定义需要的字段
-            migrations = {
-                'patient': [
-                    ('medical_card_number', 'VARCHAR', '就诊卡号'),
-                    ('diagnosis_other', 'TEXT', '诊断其他说明'),
-                    ('drug_type_other', 'TEXT', '药物其他说明'),
-                    ('left_vision_corrected', 'REAL', '左眼矫正视力'),
-                    ('right_vision_corrected', 'REAL', '右眼矫正视力'),
-                    ('is_deleted', 'BOOLEAN DEFAULT 0', '软删除标记'),
-                ],
-                'appointment': [
-                    ('attending_doctor', 'VARCHAR', '管床医生'),
-                    ('virus_report', 'VARCHAR', '病毒报告'),
-                    ('blood_sugar', 'VARCHAR', '血糖'),
-                    ('blood_pressure', 'VARCHAR', '血压'),
-                    ('left_eye_pressure', 'VARCHAR', '左眼压'),
-                    ('right_eye_pressure', 'VARCHAR', '右眼压'),
-                    ('eye_wash_result', 'VARCHAR', '冲眼结果'),
-                    ('drug_name_other', 'TEXT', '药品其他说明'),
-                    ('is_deleted', 'BOOLEAN DEFAULT 0', '软删除标记'),
-                ]
-            }
-            
-            # 检查是否需要升级
-            needs_upgrade = False
-            for table_name, fields in migrations.items():
-                cursor.execute(f"PRAGMA table_info({table_name})")
-                existing_columns = [row[1] for row in cursor.fetchall()]
-                
-                for field_name, field_type, description in fields:
-                    if field_name not in existing_columns:
-                        needs_upgrade = True
-                        break
-                if needs_upgrade:
-                    break
-            
-            if needs_upgrade:
-                logger.warning("检测到需要升级数据库结构")
-                
-                # 备份数据库
-                try:
-                    backup_file = f"database_structure_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-                    shutil.copy2(db_path, backup_file)
-                    logger.info(f"✓ 已备份数据库: {backup_file}")
-                except Exception as e:
-                    logger.warning(f"备份失败: {e}")
-                
-                # 升级数据库
-                changes_made = 0
-                for table_name, fields in migrations.items():
-                    cursor.execute(f"PRAGMA table_info({table_name})")
-                    existing_columns = [row[1] for row in cursor.fetchall()]
-                    
-                    for field_name, field_type, description in fields:
-                        if field_name not in existing_columns:
-                            try:
-                                cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {field_name} {field_type}")
-                                logger.info(f"  ✓ {table_name}.{field_name} - {description}")
-                                changes_made += 1
-                            except Exception as e:
-                                logger.error(f"  ✗ {table_name}.{field_name} - 失败: {e}")
-                
-                conn.commit()
-                logger.info(f"✓ 数据库结构升级完成! 新增 {changes_made} 个字段")
-            else:
-                logger.info("✓ 数据库结构已是最新")
-            
-            conn.close()
-            
-        except Exception as e:
-            logger.error(f"数据库结构检查失败: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+        logger.info("🔍 正在进行数据库兼容性检查...")
+        success = ensure_database_compatibility(db_path)
+        if not success:
+            logger.error("❌ 数据库兼容性检查失败，系统可能无法正常工作")
+        else:
+            logger.info("✅ 数据库兼容性检查完成")
+    else:
+        logger.info("📝 创建新数据库...")
     
     logger.info("=" * 60)
     
@@ -277,8 +222,3 @@ def on_startup():
 def on_shutdown():
     """应用关闭时执行"""
     logger.info("👋 系统已关闭")
-
-# 健康检查
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "version": "2.1.3-web"}
