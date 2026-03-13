@@ -177,6 +177,8 @@ class DatabaseCompatibilityHandler:
                     ('drug_name_other', 'TEXT', ''),
                     ('pre_op_vision_left', 'TEXT', ''),
                     ('pre_op_vision_right', 'TEXT', ''),
+                    ('pre_op_vision_left_corrected', 'TEXT', ''),
+                    ('pre_op_vision_right_corrected', 'TEXT', ''),
                     ('treatment_phase', 'TEXT', ''),
                 ]
             }

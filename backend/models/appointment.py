@@ -29,8 +29,10 @@ class AppointmentBase(SQLModel):
     follow_up_date: Optional[date] = None # 复诊时间
     next_follow_up_date: Optional[date] = None # 下次复诊时间
     diagnosis: Optional[str] = None # 诊断
-    pre_op_vision_left: Optional[str] = None # 左眼术前视力
-    pre_op_vision_right: Optional[str] = None # 右眼术前视力
+    pre_op_vision_left: Optional[str] = None # 左眼术前视力（裸眼）
+    pre_op_vision_right: Optional[str] = None # 右眼术前视力（裸眼）
+    pre_op_vision_left_corrected: Optional[str] = None # 左眼术前视力（矫正）
+    pre_op_vision_right_corrected: Optional[str] = None # 右眼术前视力（矫正）
     treatment_phase: Optional[str] = Field(default=None, description="治疗周期") # 强化期/巩固期
 
 class Appointment(AppointmentBase, table=True):
