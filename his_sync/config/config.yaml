@@ -1,0 +1,18 @@
+hospital: demo_hospital
+
+his:
+  type: mssql
+  host: 192.168.0.109
+  port: 1433
+  db: master
+  user: sa
+  password: 123456
+
+view:
+  patient: VW_VEGF_PATIENT
+
+sqlite:
+  path: ../backend/database.db
+
+sync:
+  interval: 300
