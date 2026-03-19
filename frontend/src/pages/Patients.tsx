@@ -693,7 +693,13 @@ const Patients: React.FC = () => {
           </Button>
         </Space>
       </div>
-      <Table columns={columns} dataSource={patients} rowKey="id" loading={loading} />
+      <Table 
+        columns={columns} 
+        dataSource={patients} 
+        rowKey="id" 
+        loading={loading}
+        pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `共 ${total} 条`, pageSizeOptions: ['10', '20', '50', '100'] }}
+      />
 
       {/* Add/Edit Patient Modal */}
       <Modal

@@ -72,7 +72,7 @@ def create_appointments_batch(appointments: List[AppointmentBase], session: Sess
 @router.get("/", response_model=List[Appointment])
 def read_appointments(
     skip: int = 0, 
-    limit: int = 100, 
+    limit: int = 99999, 
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     patient_id: Optional[str] = None,
