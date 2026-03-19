@@ -1,2 +1,2 @@
-pymssql
+pyodbc
 pyyaml

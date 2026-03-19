@@ -55,7 +55,7 @@ def get_db_connections():
         # 建立连接
         his_conn_obj = his_conn()
         local_conn_obj = local_conn()
-        his_cursor = his_conn_obj.cursor(as_dict=True)
+        his_cursor = his_conn_obj.cursor()
         local_cursor = local_conn_obj.cursor()
         
         yield his_cursor, local_cursor, local_conn_obj

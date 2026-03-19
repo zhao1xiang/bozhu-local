@@ -76,7 +76,7 @@ const TreatmentProgress: React.FC<TreatmentProgressProps> = ({ patient }) => {
             width: 60,
         },
         {
-            title: '实际日期',
+            title: '玻注日期',
             dataIndex: 'appointment_date',
             key: 'appointment_date',
         },
