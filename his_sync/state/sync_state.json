@@ -1,10 +1,13 @@
 {
   "patient_last_update": "2000-01-01 00:00:00",
   "patient_last_sync_count": 3,
-  "last_sync_time": "2026-03-15T11:25:44.806367",
+  "last_sync_time": "2026-03-20T12:00:17.872596",
   "last_sync_stats": {
-    "inserted": 3,
+    "inserted": 4,
     "updated": 0,
     "errors": 0
-  }
+  },
+  "active_hospital": "hospital2",
+  "hospital_name": "施尔明",
+  "last_sync_count": 4
 }

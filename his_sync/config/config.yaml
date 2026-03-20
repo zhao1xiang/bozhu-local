@@ -1,18 +1,32 @@
-hospital: demo_hospital
-
-his:
-  type: mssql
-  host: 192.168.0.109
-  port: 1433
-  db: master
-  user: sa
-  password: 123456
-
-view:
-  patient: VW_VEGF_PATIENT
-
+active_hospital: hospital2
+hospitals:
+  hospital1:
+    adapter: hospital1_adapter
+    his:
+      charset: cp936
+      db: master
+      host: 192.168.0.112
+      password: 123456
+      port: 1433
+      type: mssql
+      user: sa
+    name: 山东省眼科
+    view:
+      patient: VW_VEGF_PATIENT
+  hospital2:
+    adapter: hospital2_adapter
+    his:
+      charset: utf8
+      db: master
+      host: 192.168.0.112
+      password: 123456
+      port: 1433
+      type: mssql
+      user: sa
+    name: 施尔明
+    view:
+      patient: VW_PATIENT_TEST
 sqlite:
   path: ../backend/database.db
-
 sync:
   interval: 300
