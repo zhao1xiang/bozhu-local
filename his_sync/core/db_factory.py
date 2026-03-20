@@ -6,6 +6,29 @@ import time
 from core.logger import logger
 
 
+# SQL Server ODBC 驱动优先级列表（从新到旧）
+MSSQL_DRIVERS = [
+    "ODBC Driver 18 for SQL Server",
+    "ODBC Driver 17 for SQL Server",
+    "ODBC Driver 13 for SQL Server",
+    "ODBC Driver 11 for SQL Server",
+    "SQL Server Native Client 11.0",
+    "SQL Server Native Client 10.0",
+    "SQL Server",
+]
+
+
+def get_available_driver():
+    """获取系统中可用的 SQL Server ODBC 驱动"""
+    installed = pyodbc.drivers()
+    for driver in MSSQL_DRIVERS:
+        if driver in installed:
+            logger.info(f"使用 ODBC 驱动: {driver}")
+            return driver
+    logger.error(f"未找到可用的 SQL Server ODBC 驱动，已安装驱动: {installed}")
+    raise RuntimeError(f"未找到 SQL Server ODBC 驱动，请安装 ODBC Driver for SQL Server")
+
+
 def get_his_conn(hospital_config, max_retries=3, retry_delay=5):
     """
     根据医院配置获取 HIS 数据库连接
@@ -13,44 +36,40 @@ def get_his_conn(hospital_config, max_retries=3, retry_delay=5):
     his_config = hospital_config["his"]
     hospital_name = hospital_config["name"]
     
+    # 获取可用驱动（只检测一次）
+    try:
+        driver = get_available_driver()
+    except RuntimeError as e:
+        raise
+
     for attempt in range(max_retries):
         try:
             logger.debug(f"尝试连接 {hospital_name} HIS 数据库 (第 {attempt + 1} 次)")
             
-            # 构建连接字符串
             server = f"{his_config['host']},{his_config['port']}"
             database = his_config["db"]
             username = his_config["user"]
             password = his_config["password"]
-            
-            # 优先使用配置中指定的编码
             preferred_charset = his_config.get("charset", "cp936")
             
-            # 根据编码设置不同的连接字符串
             if preferred_charset in ["utf8", "utf-8"]:
-                conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server};DATABASE={database};UID={username};PWD={password};CHARSET=UTF8;"
+                conn_str = f"DRIVER={{{driver}}};SERVER={server};DATABASE={database};UID={username};PWD={password};CHARSET=UTF8;"
             else:
-                conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server};DATABASE={database};UID={username};PWD={password};"
+                conn_str = f"DRIVER={{{driver}}};SERVER={server};DATABASE={database};UID={username};PWD={password};"
             
             try:
                 conn = pyodbc.connect(conn_str, timeout=30)
                 
-                # 测试查询以验证编码是否正确
                 cursor = conn.cursor()
-                
-                # 根据不同医院使用不同的测试查询
                 if hospital_config.get("id") == "hospital2":
-                    # hospital2 使用 patient_source 表
                     cursor.execute("SELECT TOP 1 name FROM patient_source WHERE name IS NOT NULL AND name != ''")
                 else:
-                    # hospital1 使用 VW_VEGF_PATIENT 视图
                     cursor.execute("SELECT TOP 1 BRXM as name FROM VW_VEGF_PATIENT WHERE BRXM IS NOT NULL AND BRXM != ''")
                 
                 test_row = cursor.fetchone()
                 cursor.close()
                 
                 if test_row and test_row[0] and test_row[0].strip():
-                    # 检查是否包含中文字符且没有乱码
                     test_name = test_row[0]
                     if len(test_name) > 0 and not any(ord(c) > 127 and c in 'ÀîËÄÍõÎåÕÅÈý' for c in test_name):
                         logger.info(f"{hospital_name} HIS 数据库连接成功，使用编码: {preferred_charset}")
@@ -62,19 +81,16 @@ def get_his_conn(hospital_config, max_retries=3, retry_delay=5):
             except Exception as e:
                 logger.debug(f"编码 {preferred_charset} 连接失败: {e}")
                 
-                # 如果首选编码失败，尝试其他编码
                 other_charsets = ["cp936", "utf8"] if preferred_charset != "cp936" else ["utf8"]
                 
                 for charset in other_charsets:
                     try:
                         if charset in ["utf8", "utf-8"]:
-                            conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server};DATABASE={database};UID={username};PWD={password};CHARSET=UTF8;"
+                            conn_str = f"DRIVER={{{driver}}};SERVER={server};DATABASE={database};UID={username};PWD={password};CHARSET=UTF8;"
                         else:
-                            conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server};DATABASE={database};UID={username};PWD={password};"
+                            conn_str = f"DRIVER={{{driver}}};SERVER={server};DATABASE={database};UID={username};PWD={password};"
                         
                         conn = pyodbc.connect(conn_str, timeout=30)
-                        
-                        # 测试查询
                         cursor = conn.cursor()
                         if hospital_config.get("id") == "hospital2":
                             cursor.execute("SELECT TOP 1 name FROM patient_source WHERE name IS NOT NULL AND name != ''")
@@ -97,8 +113,8 @@ def get_his_conn(hospital_config, max_retries=3, retry_delay=5):
                         logger.debug(f"编码 {charset} 连接失败: {e2}")
                         continue
             
-            # 如果所有编码都失败，使用默认连接
-            conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server};DATABASE={database};UID={username};PWD={password};"
+            # 所有编码都失败，使用默认连接
+            conn_str = f"DRIVER={{{driver}}};SERVER={server};DATABASE={database};UID={username};PWD={password};"
             conn = pyodbc.connect(conn_str, timeout=30)
             logger.warning(f"{hospital_name} HIS 数据库连接成功，但可能存在编码问题")
             return conn

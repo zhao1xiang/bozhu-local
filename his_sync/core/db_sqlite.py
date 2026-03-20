@@ -8,7 +8,7 @@ def get_conn():
     """
     获取 SQLite 连接
     """
-    with open("config/config.yaml") as f:
+    with open("config/config.yaml", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
     path = cfg["sqlite"]["path"]
