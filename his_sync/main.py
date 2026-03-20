@@ -29,7 +29,7 @@ class SyncService:
             logger.error("健康检查失败，服务无法启动")
             sys.exit(1)
         
-        with open("config/config.yaml") as f:
+        with open("config/config.yaml", 'r', encoding='utf-8') as f:
             cfg = yaml.safe_load(f)
 
         interval = cfg["sync"]["interval"]

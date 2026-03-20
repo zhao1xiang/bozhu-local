@@ -10,7 +10,7 @@ from core.logger import logger
 
 def load_config():
     """加载配置文件"""
-    with open("config/config.yaml") as f:
+    with open("config/config.yaml", 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
 
 

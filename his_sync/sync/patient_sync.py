@@ -16,7 +16,7 @@ CONFIG_FILE = "config/config.yaml"
 def load_state():
     """加载同步状态"""
     try:
-        with open(STATE_FILE) as f:
+        with open(STATE_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
         logger.warning(f"状态文件 {STATE_FILE} 不存在，使用默认状态")
@@ -29,7 +29,7 @@ def load_state():
 def save_state(state):
     """保存同步状态"""
     try:
-        with open(STATE_FILE, "w") as f:
+        with open(STATE_FILE, "w", encoding='utf-8') as f:
             json.dump(state, f, indent=2, ensure_ascii=False)
         logger.debug("状态文件保存成功")
     except Exception as e:
@@ -38,7 +38,7 @@ def save_state(state):
 
 def load_config():
     """加载配置文件"""
-    with open(CONFIG_FILE) as f:
+    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
 
 

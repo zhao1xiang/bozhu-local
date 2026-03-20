@@ -16,13 +16,13 @@ CONFIG_FILE = "config/config.yaml"
 
 def load_config():
     """加载配置文件"""
-    with open(CONFIG_FILE) as f:
+    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
 
 
 def save_config(config):
     """保存配置文件"""
-    with open(CONFIG_FILE, 'w') as f:
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
         yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
 
 
