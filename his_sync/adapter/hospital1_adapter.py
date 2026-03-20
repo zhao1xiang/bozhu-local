@@ -11,12 +11,10 @@ def convert_patient(row):
     """
     try:
         # 数据转换和验证
-        name = str(row["BRXM"]) if row.get("BRXM") is not None else ""
+        name = str(row["BRXM"]) if row.get("BRXM") is not None else None
         outpatient_number = str(row["ZYH"]) if row.get("ZYH") is not None else None
         medical_card_number = str(row["ZJHM"]) if row.get("ZJHM") is not None else None
-        
-        # 第一家医院的视图没有这些字段，设为 None
-        phone = None
+        phone = str(row["LXDH"]) if row.get("LXDH") is not None else None
         diagnosis = None
         patient_type = None
         
