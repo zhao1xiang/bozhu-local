@@ -42,7 +42,7 @@ def create_patient(patient: PatientBase, session: Session = Depends(get_session)
     return db_patient
 
 @router.get("/", response_model=List[Patient])
-def read_patients(skip: int = 0, limit: int = 100, session: Session = Depends(get_session)):
+def read_patients(skip: int = 0, limit: int = 99999, session: Session = Depends(get_session)):
     try:
         patients = session.exec(
             select(Patient)

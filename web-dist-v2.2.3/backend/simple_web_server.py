@@ -93,6 +93,101 @@ def add_column_safe_exec(cursor, table_name, column_name, column_type, default_v
         logging.error(f"✗ 添加字段失败 {table_name}.{column_name}: {e}")
         return False
 
+def migrate_vision_fields_if_needed(cursor, logger):
+    """检查并迁移视力字段类型（从REAL到TEXT）"""
+    try:
+        # 检查patient表的视力字段类型
+        cursor.execute("PRAGMA table_info(patient)")
+        columns = cursor.fetchall()
+        
+        vision_fields = ['left_vision', 'right_vision', 'left_vision_corrected', 'right_vision_corrected']
+        needs_migration = False
+        
+        for col in columns:
+            col_name = col[1]
+            col_type = col[2]
+            if col_name in vision_fields and col_type == 'REAL':
+                needs_migration = True
+                break
+        
+        if not needs_migration:
+            logger.info("视力字段类型已是TEXT，无需迁移")
+            return False
+        
+        logger.info("发现视力字段为REAL类型，开始迁移到TEXT类型...")
+        
+        # 创建新表
+        cursor.execute("""
+            CREATE TABLE patient_new (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                outpatient_number TEXT,
+                medical_card_number TEXT,
+                phone TEXT NOT NULL UNIQUE,
+                diagnosis TEXT,
+                diagnosis_other TEXT,
+                drug_type TEXT,
+                drug_type_other TEXT,
+                left_vision TEXT,
+                right_vision TEXT,
+                left_vision_corrected TEXT,
+                right_vision_corrected TEXT,
+                left_eye INTEGER NOT NULL DEFAULT 0,
+                right_eye INTEGER NOT NULL DEFAULT 0,
+                patient_type TEXT,
+                injection_count INTEGER,
+                remarks TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                is_deleted INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        
+        # 复制数据（将数字转为字符串）
+        cursor.execute("""
+            INSERT INTO patient_new (
+                id, name, outpatient_number, medical_card_number, phone,
+                diagnosis, diagnosis_other, drug_type, drug_type_other,
+                left_vision, right_vision, left_vision_corrected, right_vision_corrected,
+                left_eye, right_eye, patient_type, injection_count,
+                status, is_deleted, created_at, updated_at, remarks
+            )
+            SELECT 
+                id, name, outpatient_number, medical_card_number, phone,
+                diagnosis, diagnosis_other, drug_type, drug_type_other,
+                CAST(COALESCE(left_vision, '') AS TEXT),
+                CAST(COALESCE(right_vision, '') AS TEXT),
+                CAST(COALESCE(left_vision_corrected, '') AS TEXT),
+                CAST(COALESCE(right_vision_corrected, '') AS TEXT),
+                left_eye, right_eye, patient_type, injection_count,
+                status, COALESCE(is_deleted, 0), created_at, updated_at, COALESCE(remarks, '')
+            FROM patient
+        """)
+        
+        rows_copied = cursor.rowcount
+        logger.info(f"已复制 {rows_copied} 条记录")
+        
+        # 删除旧表并重命名新表
+        cursor.execute("DROP TABLE patient")
+        cursor.execute("ALTER TABLE patient_new RENAME TO patient")
+        
+        # 重建索引
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_patient_name ON patient(name)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_patient_outpatient_number ON patient(outpatient_number)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_patient_phone ON patient(phone)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_patient_status ON patient(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_patient_is_deleted ON patient(is_deleted)")
+        
+        logger.info("✓ 视力字段类型迁移完成")
+        return True
+        
+    except Exception as e:
+        logger.error(f"视力字段迁移失败: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
 def auto_migrate_on_startup(db_path, logger):
     """启动时自动迁移数据库"""
     if not os.path.exists(db_path):
@@ -158,6 +253,11 @@ def auto_migrate_on_startup(db_path, logger):
                 field_name, field_type, default_value, description = field_info
                 if add_column_safe_exec(cursor, table_name, field_name, field_type, default_value, description):
                     changes_made += 1
+        
+        # 检查并执行视力字段类型迁移
+        logger.info("检查视力字段类型...")
+        if migrate_vision_fields_if_needed(cursor, logger):
+            changes_made += 1
         
         # 提交更改
         conn.commit()
@@ -284,20 +384,30 @@ def main():
         
         logger.info(f"✓ 找到前端目录: {frontend_dir}")
         
-        # 检查数据库文件
+        # 检查数据库文件 - 使用新的兼容性处理
         if os.path.exists("database.db"):
             logger.info(f"✓ 找到数据库文件: database.db")
             
-            # 自动数据库迁移
-            logger.info("检查数据库结构...")
+            # 使用新的兼容性处理模块
+            logger.info("检查数据库兼容性...")
             try:
-                if auto_migrate_on_startup("database.db", logger):
-                    logger.info("数据库检查完成")
+                from database_compatibility import ensure_database_compatibility
+                if ensure_database_compatibility("database.db"):
+                    logger.info("✓ 数据库兼容性检查通过")
                 else:
-                    logger.warning("数据库迁移有问题，但继续启动...")
+                    logger.warning("⚠ 数据库兼容性检查有问题，但继续启动...")
             except Exception as e:
-                logger.warning(f"数据库迁移检查失败: {e}")
-                logger.warning("继续启动服务器...")
+                logger.warning(f"兼容性检查失败: {e}")
+                logger.warning("继续使用原有迁移方式...")
+                # 回退到原有的迁移方式
+                try:
+                    if auto_migrate_on_startup("database.db", logger):
+                        logger.info("数据库检查完成")
+                    else:
+                        logger.warning("数据库迁移有问题，但继续启动...")
+                except Exception as e2:
+                    logger.warning(f"数据库迁移检查失败: {e2}")
+                    logger.warning("继续启动服务器...")
         else:
             logger.warning(f"未找到数据库文件，将自动创建")
         

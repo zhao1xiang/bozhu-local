@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 # 配置
 SERVICE_NAME="眼科注射预约系统"
 PYTHON_CMD="python3"
-MAIN_SCRIPT="main.py"
+MAIN_SCRIPT="main_static.py"
 PID_FILE="backend.pid"
 LOG_FILE="logs/backend.log"
 PORT=8031

@@ -4,6 +4,9 @@ from database import engine
 from models import Appointment, AppointmentBase
 from typing import List, Optional
 from datetime import date
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
@@ -69,7 +72,7 @@ def create_appointments_batch(appointments: List[AppointmentBase], session: Sess
 @router.get("/", response_model=List[Appointment])
 def read_appointments(
     skip: int = 0, 
-    limit: int = 100, 
+    limit: int = 99999, 
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     patient_id: Optional[str] = None,
