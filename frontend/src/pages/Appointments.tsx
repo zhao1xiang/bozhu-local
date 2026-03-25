@@ -982,16 +982,29 @@ const Appointments: React.FC = () => {
                             <InputNumber min={1} style={{ width: '100%' }} />
                           </Form.Item>
                         </Col>
-                        <Col span={4}>
+                        <Col span={0}>
                           <Form.Item
                             {...restField}
                             name={[name, 'injection_number']}
                             label="注药号"
+                            style={{ display: 'none' }}
                           >
                             <Input placeholder="号" />
                           </Form.Item>
                         </Col>
                         <Col span={4}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'condition_status']}
+                            label="状况"
+                          >
+                            <Select placeholder="状况" options={[
+                              { label: '稳定', value: '稳定' },
+                              { label: '不稳定', value: '不稳定' },
+                            ]} />
+                          </Form.Item>
+                        </Col>
+                        <Col span={5}>
                           <Form.Item
                             {...restField}
                             name={[name, 'treatment_phase']}
@@ -1004,7 +1017,7 @@ const Appointments: React.FC = () => {
                             ]} />
                           </Form.Item>
                         </Col>
-                        <Col span={3}>
+                        <Col span={2}>
                           <Button
                             type="link"
                             danger
@@ -1087,8 +1100,16 @@ const Appointments: React.FC = () => {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="injection_number" label="注药号">
+                  <Form.Item name="injection_number" label="注药号" style={{ display: 'none' }}>
                     <Input placeholder="例如：20231001-01" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="condition_status" label="状况">
+                    <Select placeholder="选择状况" options={[
+                      { label: '稳定', value: '稳定' },
+                      { label: '不稳定', value: '不稳定' },
+                    ]} />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
@@ -1096,7 +1117,7 @@ const Appointments: React.FC = () => {
                     <InputNumber min={1} style={{ width: '100%' }} />
                   </Form.Item>
                 </Col>
-                <Col span={12}>
+                <Col span={24}>
                   <Form.Item name="treatment_phase" label="治疗周期">
                     <Radio.Group>
                       <Radio value="强化期">强化期</Radio>
@@ -1114,12 +1135,12 @@ const Appointments: React.FC = () => {
               <div style={{ marginBottom: 8, fontWeight: 500, color: '#666' }}>裸眼视力</div>
               <Row gutter={16}>
                 <Col span={12}>
-                  <Form.Item name="pre_op_vision_left" label="左眼" style={{ marginBottom: 0 }}>
+                  <Form.Item name="pre_op_vision_right" label="右眼" style={{ marginBottom: 0 }}>
                     <Input style={{ width: '100%' }} placeholder="例: 0.5 或 手动/光感" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="pre_op_vision_right" label="右眼" style={{ marginBottom: 0 }}>
+                  <Form.Item name="pre_op_vision_left" label="左眼" style={{ marginBottom: 0 }}>
                     <Input style={{ width: '100%' }} placeholder="例: 0.5 或 手动/光感" />
                   </Form.Item>
                 </Col>
@@ -1129,12 +1150,12 @@ const Appointments: React.FC = () => {
               <div style={{ marginBottom: 8, fontWeight: 500, color: '#666' }}>矫正视力</div>
               <Row gutter={16}>
                 <Col span={12}>
-                  <Form.Item name="pre_op_vision_left_corrected" label="左眼" style={{ marginBottom: 0 }}>
+                  <Form.Item name="pre_op_vision_right_corrected" label="右眼" style={{ marginBottom: 0 }}>
                     <Input style={{ width: '100%' }} placeholder="例: 0.8 或 手动/光感" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="pre_op_vision_right_corrected" label="右眼" style={{ marginBottom: 0 }}>
+                  <Form.Item name="pre_op_vision_left_corrected" label="左眼" style={{ marginBottom: 0 }}>
                     <Input style={{ width: '100%' }} placeholder="例: 0.8 或 手动/光感" />
                   </Form.Item>
                 </Col>
@@ -1144,12 +1165,12 @@ const Appointments: React.FC = () => {
 
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="left_eye_pressure" label="左眼眼压">
+              <Form.Item name="right_eye_pressure" label="右眼眼压">
                 <Input style={{ width: '100%' }} />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="right_eye_pressure" label="右眼眼压">
+              <Form.Item name="left_eye_pressure" label="左眼眼压">
                 <Input style={{ width: '100%' }} />
               </Form.Item>
             </Col>
@@ -1180,8 +1201,8 @@ const Appointments: React.FC = () => {
             <Col span={8}>
               <Form.Item name="eye" label="眼别">
                 <Radio.Group>
-                  <Radio value="左眼">左眼</Radio>
                   <Radio value="右眼">右眼</Radio>
+                  <Radio value="左眼">左眼</Radio>
                   <Radio value="双眼">双眼</Radio>
                 </Radio.Group>
               </Form.Item>

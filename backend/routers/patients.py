@@ -12,28 +12,28 @@ def get_session():
 
 @router.post("/", response_model=Patient)
 def create_patient(patient: PatientBase, session: Session = Depends(get_session)):
-    # Check for duplicates (exclude deleted patients)
-    # Only check phone for duplicates since outpatient_number is now optional
-    existing_patient = session.exec(
-        select(Patient).where(
-            Patient.is_deleted == False,
-            Patient.phone == patient.phone
-        )
-    ).first()
-    
-    if existing_patient:
-        raise HTTPException(
-            status_code=409, 
-            detail={
-                "message": "Patient already exists",
-                "patient": {
-                    "id": existing_patient.id,
-                    "name": existing_patient.name,
-                    "outpatient_number": existing_patient.outpatient_number,
-                    "phone": existing_patient.phone
+    # 仅当手机号有值时检查重复
+    if patient.phone:
+        existing_patient = session.exec(
+            select(Patient).where(
+                Patient.is_deleted == False,
+                Patient.phone == patient.phone
+            )
+        ).first()
+        
+        if existing_patient:
+            raise HTTPException(
+                status_code=409, 
+                detail={
+                    "message": "Patient already exists",
+                    "patient": {
+                        "id": existing_patient.id,
+                        "name": existing_patient.name,
+                        "outpatient_number": existing_patient.outpatient_number,
+                        "phone": existing_patient.phone
+                    }
                 }
-            }
-        )
+            )
         
     db_patient = Patient.model_validate(patient)
     session.add(db_patient)
@@ -132,29 +132,26 @@ class ImportResult(BaseModel):
 
 @router.post("/import", response_model=ImportResult)
 async def import_patients(file: UploadFile = File(...), session: Session = Depends(get_session)):
-    """批量导入患者"""
+    """批量导入患者（支持同时导入预约）"""
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="只支持Excel文件(.xlsx, .xls)")
-    
+
     try:
-        # 读取Excel文件
         contents = await file.read()
         wb = openpyxl.load_workbook(io.BytesIO(contents))
         ws = wb.active
-        
+
         success_count = 0
         error_count = 0
         errors = []
         duplicates = []
-        
-        # 从第3行开始读取数据（第1行表头，第2行说明）
+
         for row_idx, row in enumerate(ws.iter_rows(min_row=3, values_only=True), start=3):
-            # 跳过空行
             if not any(row):
                 continue
-            
+
             try:
-                # 解析数据
+                # 患者字段（列 0-16）
                 name = str(row[0]).strip() if row[0] else None
                 outpatient_number = str(row[1]).strip() if row[1] else None
                 medical_card_number = str(row[2]).strip() if row[2] else None
@@ -163,66 +160,77 @@ async def import_patients(file: UploadFile = File(...), session: Session = Depen
                 diagnosis_other = str(row[5]).strip() if row[5] else None
                 drug_type = str(row[6]).strip() if row[6] else None
                 drug_type_other = str(row[7]).strip() if row[7] else None
-                
-                # 视力数据（改为字符串类型）
                 left_vision = str(row[8]).strip() if row[8] and str(row[8]).strip() else None
                 right_vision = str(row[9]).strip() if row[9] and str(row[9]).strip() else None
                 left_vision_corrected = str(row[10]).strip() if row[10] and str(row[10]).strip() else None
                 right_vision_corrected = str(row[11]).strip() if row[11] and str(row[11]).strip() else None
-                
-                # 注射眼别
                 left_eye_str = str(row[12]).strip() if row[12] else "否"
                 right_eye_str = str(row[13]).strip() if row[13] else "否"
                 left_eye = left_eye_str in ["是", "True", "true", "1", "YES", "yes"]
                 right_eye = right_eye_str in ["是", "True", "true", "1", "YES", "yes"]
-                
-                # 患者类型和针数
                 patient_type = str(row[14]).strip() if row[14] else None
                 injection_count = int(row[15]) if row[15] and str(row[15]).strip() else None
                 remarks = str(row[16]).strip() if row[16] else None
-                
+
+                # 预约字段（列 17-26，可选）
+                appt_date_raw = row[17] if len(row) > 17 else None
+                appt_eye = str(row[18]).strip() if len(row) > 18 and row[18] else None
+                appt_drug = str(row[19]).strip() if len(row) > 19 and row[19] else None
+                appt_doctor = str(row[20]).strip() if len(row) > 20 and row[20] else None
+                appt_cost_type = str(row[21]).strip() if len(row) > 21 and row[21] else None
+                appt_injection_count = int(row[22]) if len(row) > 22 and row[22] and str(row[22]).strip() else None
+                appt_treatment_phase = str(row[23]).strip() if len(row) > 23 and row[23] else None
+                appt_time_slot = str(row[24]).strip() if len(row) > 24 and row[24] else "上午"
+                appt_condition_status = str(row[25]).strip() if len(row) > 25 and row[25] else None
+                appt_notes = str(row[26]).strip() if len(row) > 26 and row[26] else None
+
+                # 解析预约日期
+                appt_date = None
+                if appt_date_raw:
+                    from datetime import date as date_type, datetime as dt_type
+                    if isinstance(appt_date_raw, date_type):
+                        appt_date = appt_date_raw
+                    else:
+                        try:
+                            appt_date = dt_type.strptime(str(appt_date_raw).strip(), "%Y-%m-%d").date()
+                        except Exception:
+                            pass
+
                 # 数据验证
                 if not name:
                     errors.append({"row": row_idx, "error": "姓名不能为空"})
                     error_count += 1
                     continue
-                
-                if not phone:
-                    errors.append({"row": row_idx, "error": "手机号不能为空"})
-                    error_count += 1
-                    continue
-                
-                # 验证手机号格式
-                if not re.match(r'^1[3-9]\d{9}$', phone):
-                    errors.append({"row": row_idx, "error": f"手机号格式不正确: {phone}"})
-                    error_count += 1
-                    continue
-                
-                # 验证患者类型
+
                 if patient_type and patient_type not in ["初治", "经治"]:
                     errors.append({"row": row_idx, "error": f"患者类型必须是'初治'或'经治': {patient_type}"})
                     error_count += 1
                     continue
-                
-                # 检查重复
-                existing_patient = session.exec(
-                    select(Patient).where(
-                        Patient.is_deleted == False,
-                        Patient.phone == phone
-                    )
-                ).first()
-                
+
+                # 检查重复（按手机号，仅当手机号有值时）
+                existing_patient = None
+                if phone:
+                    existing_patient = session.exec(
+                        select(Patient).where(
+                            Patient.is_deleted == False,
+                            Patient.phone == phone
+                        )
+                    ).first()
+
                 if existing_patient:
                     duplicates.append({
                         "row": row_idx,
                         "name": name,
-                        "phone": phone,
+                        "phone": phone or "",
                         "existing_name": existing_patient.name
                     })
                     error_count += 1
                     continue
-                
+
                 # 创建患者
+                from models.appointment import Appointment as ApptModel
+                import uuid as uuid_mod
+
                 patient_data = PatientBase(
                     name=name,
                     outpatient_number=outpatient_number,
@@ -242,29 +250,49 @@ async def import_patients(file: UploadFile = File(...), session: Session = Depen
                     injection_count=injection_count,
                     remarks=remarks
                 )
-                
                 db_patient = Patient.model_validate(patient_data)
                 session.add(db_patient)
+                session.flush()  # 获取 patient id
+
+                # 如果有预约日期，创建预约
+                if appt_date:
+                    appt = ApptModel(
+                        id=str(uuid_mod.uuid4()),
+                        patient_id=db_patient.id,
+                        appointment_date=appt_date,
+                        eye=appt_eye,
+                        drug_name=appt_drug,
+                        doctor=appt_doctor,
+                        cost_type=appt_cost_type,
+                        injection_count=appt_injection_count,
+                        treatment_phase=appt_treatment_phase,
+                        time_slot=appt_time_slot,
+                        condition_status=appt_condition_status,
+                        notes=appt_notes,
+                        status="scheduled",
+                    )
+                    session.add(appt)
+
                 success_count += 1
-                
+
             except Exception as e:
                 errors.append({"row": row_idx, "error": str(e)})
                 error_count += 1
                 continue
-        
-        # 提交所有成功的记录
+
         if success_count > 0:
             session.commit()
-        
+
         return ImportResult(
             success_count=success_count,
             error_count=error_count,
             errors=errors,
             duplicates=duplicates
         )
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"导入失败: {str(e)}")
+
 
 @router.get("/template/download")
 async def download_template():

@@ -87,6 +87,7 @@ const Dashboard: React.FC = () => {
   const [diseaseData, setDiseaseData] = useState<{ name: string; value: number }[]>([]);
   const [doctorData, setDoctorData] = useState<{ name: string; value: number }[]>([]);
   const [rates, setRates] = useState({ 强化期: 0, 巩固期: 0 });
+  const [dotRates, setDotRates] = useState({ rate4: 0, rate5: 0, rate6: 0 });
 
   const fetchTrend = async (dim: string) => {
     try {
@@ -98,17 +99,19 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const [statsRes, distRes, docRes, rateRes] = await Promise.all([
+        const [statsRes, distRes, docRes, rateRes, dotRes] = await Promise.all([
           apiClient.get('/dashboard/stats'),
           apiClient.get('/dashboard/charts/distribution'),
           apiClient.get('/dashboard/charts/doctors'),
           apiClient.get('/dashboard/charts/reinjection-rate'),
+          apiClient.get('/dashboard/charts/dot-rates'),
         ]);
         setStats(statsRes.data || {});
         setEyeData(distRes.data?.eyes || []);
         setDiseaseData(distRes.data?.diseases || []);
         setDoctorData(docRes.data || []);
         setRates(rateRes.data || { 强化期: 0, 巩固期: 0 });
+        setDotRates(dotRes.data || { rate4: 0, rate5: 0, rate6: 0 });
         await fetchTrend('month');
       } catch (e) { console.error(e); }
     })();
@@ -187,28 +190,36 @@ const Dashboard: React.FC = () => {
 
   const doctorOption = doctorData.length > 0 ? {
     animation: true,
-    grid: { top: 8, left: 72, right: 40, bottom: 8 },
+    grid: { top: 8, left: 72, right: 60, bottom: 8 },
     tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: C.purple, textStyle: { color: C.text1, fontSize: 12 } },
+    legend: { top: 0, right: 0, textStyle: { color: C.text2, fontSize: 11 }, icon: 'circle', itemWidth: 8, itemHeight: 8 },
     xAxis: {
       type: 'value',
-      axisLabel: { color: C.text2, fontSize: 10 },
+      axisLabel: { color: C.text2, fontSize: 10, formatter: (v: number) => `${v}%` },
       splitLine: { lineStyle: { color: C.gridLine } }
     },
     yAxis: {
       type: 'category',
-      data: [...doctorData].reverse().map(d => d.name),
+      data: [...doctorData].reverse().map((d: any) => d.name),
       axisLabel: { color: C.text2, fontSize: 11 },
       axisLine: { show: false }, axisTick: { show: false }
     },
-    series: [{
-      type: 'bar', barMaxWidth: 16,
-      itemStyle: {
-        borderRadius: [0, 6, 6, 0],
-        color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: C.purple }, { offset: 1, color: C.purpleSoft }] }
+    series: [
+      {
+        name: '强化期',
+        type: 'bar', barMaxWidth: 10,
+        itemStyle: { borderRadius: [0, 4, 4, 0], color: C.purple },
+        label: { show: true, position: 'right', fontSize: 10, color: C.text2, formatter: (p: any) => `${p.value}%` },
+        data: [...doctorData].reverse().map((d: any) => d['强化期'])
       },
-      label: { show: true, position: 'right', fontSize: 11, color: C.text2 },
-      data: [...doctorData].reverse().map(d => d.value)
-    }]
+      {
+        name: '巩固期',
+        type: 'bar', barMaxWidth: 10,
+        itemStyle: { borderRadius: [0, 4, 4, 0], color: C.purpleSoft },
+        label: { show: true, position: 'right', fontSize: 10, color: C.text2, formatter: (p: any) => `${p.value}%` },
+        data: [...doctorData].reverse().map((d: any) => d['巩固期'])
+      }
+    ]
   } : null;
 
   const trendExtra = (
@@ -241,17 +252,16 @@ const Dashboard: React.FC = () => {
         <KpiCard icon={<CalendarOutlined />} label="今日预约" value={stats.today_appointments} iconBg="rgba(157,78,221,0.1)" iconColor={C.purpleLight} />
         <KpiCard icon={<BellOutlined />} label="复诊提醒" value={stats.due_follow_ups} iconBg="rgba(217,79,53,0.1)" iconColor="#d94f35" />
         <KpiCard icon={<LineChartOutlined />} label="强化期约针率" value={rates.强化期} suffix="%" />
-        <KpiCard icon={<SafetyOutlined />} label="巩固期约针率" value={rates.巩固期} suffix="%" iconBg="rgba(199,125,255,0.15)" iconColor={C.purpleSoft} />
-      </div>
+        <KpiCard icon={<SafetyOutlined />} label="巩固期约针率" value={rates.巩固期} suffix="%" iconBg="rgba(199,125,255,0.15)" iconColor={C.purpleSoft} />      </div>
 
       {/* 中间行 */}
       <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 12, flex: 1, minHeight: 0 }}>
         <GlassCard title="医院整体 DOT（约针率）">
           <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', flex: 1, minHeight: 0 }}>
             {[
-              { label: '四针率', value: rates.强化期, color: C.purple },
-              { label: '五针率', value: Math.round((rates.强化期 + rates.巩固期) / 2), color: C.purpleLight },
-              { label: '六针率', value: rates.巩固期, color: C.purpleSoft },
+              { label: '四针率', value: dotRates.rate4, color: C.purple },
+              { label: '五针率', value: dotRates.rate5, color: C.purpleLight },
+              { label: '六针率', value: dotRates.rate6, color: C.purpleSoft },
             ].map(item => (
               <div key={item.label} style={{ textAlign: 'center' }}>
                 <ReactECharts option={donutOption(item.value, item.color)} style={{ width: 130, height: 130 }} />

@@ -1,0 +1,19 @@
+active_hospital: hospital1
+hospitals:
+  hospital1:
+    adapter: hospital1_adapter
+    his:
+      charset: utf8
+      db: BZ
+      host: 192.168.0.94
+      password: BZBC@2026
+      port: 1433
+      type: mssql
+      user: bz
+    name: 施尔明
+    view:
+      patient: getPatientInfo
+sqlite:
+  path: ../backend/database.db
+sync:
+  interval: 300

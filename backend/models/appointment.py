@@ -34,6 +34,7 @@ class AppointmentBase(SQLModel):
     pre_op_vision_left_corrected: Optional[str] = None # 左眼术前视力（矫正）
     pre_op_vision_right_corrected: Optional[str] = None # 右眼术前视力（矫正）
     treatment_phase: Optional[str] = Field(default=None, description="治疗周期") # 强化期/巩固期
+    condition_status: Optional[str] = Field(default=None, description="状况") # 稳定/不稳定
 
 class Appointment(AppointmentBase, table=True):
     id: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)

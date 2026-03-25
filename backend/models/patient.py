@@ -7,7 +7,7 @@ class PatientBase(SQLModel):
     name: str = Field(index=True)
     outpatient_number: Optional[str] = Field(default=None, index=True, description="门诊号")
     medical_card_number: Optional[str] = Field(default=None, description="就诊卡号")
-    phone: str = Field(index=True, unique=True, description="手机号")
+    phone: Optional[str] = Field(default=None, index=True, description="手机号")
     diagnosis: Optional[str] = None
     diagnosis_other: Optional[str] = Field(default=None, description="诊断其他说明")
     drug_type: Optional[str] = None

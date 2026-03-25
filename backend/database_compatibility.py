@@ -96,6 +96,16 @@ class DatabaseCompatibilityHandler:
                     'fields': missing_fields,
                     'severity': 'low'
                 })
+
+            # 检查 patient.phone 是否允许 NULL
+            nullable_issues = self.check_nullable_fields(cursor)
+            if nullable_issues:
+                issues.append({
+                    'type': 'nullable_fields',
+                    'description': '字段需要改为允许 NULL',
+                    'fields': nullable_issues,
+                    'severity': 'medium'
+                })
             
             # 检查数据完整性
             integrity_issues = self.check_data_integrity(cursor)
@@ -164,6 +174,8 @@ class DatabaseCompatibilityHandler:
                     ('drug_type_other', 'TEXT', ''),
                     ('left_vision_corrected', 'TEXT', ''),
                     ('right_vision_corrected', 'TEXT', ''),
+                    ('patient_type', 'TEXT', ''),
+                    ('injection_count', 'INTEGER', ''),
                 ],
                 'appointment': [
                     ('attending_doctor', 'TEXT', ''),
@@ -180,6 +192,16 @@ class DatabaseCompatibilityHandler:
                     ('pre_op_vision_left_corrected', 'TEXT', ''),
                     ('pre_op_vision_right_corrected', 'TEXT', ''),
                     ('treatment_phase', 'TEXT', ''),
+                    ('condition_status', 'TEXT', ''),
+                    ('injection_number', 'TEXT', ''),
+                    ('injection_count', 'INTEGER', ''),
+                    ('eye', 'TEXT', ''),
+                    ('drug_name', 'TEXT', ''),
+                    ('cost_type', 'TEXT', ''),
+                    ('doctor', 'TEXT', ''),
+                    ('follow_up_date', 'TEXT', ''),
+                    ('next_follow_up_date', 'TEXT', ''),
+                    ('diagnosis', 'TEXT', ''),
                 ]
             }
             
@@ -231,6 +253,11 @@ class DatabaseCompatibilityHandler:
             for issue in issues:
                 if issue['type'] == 'missing_fields':
                     self.fix_missing_fields(cursor, issue['fields'])
+
+            # 优先级1.5: 修复字段 nullable
+            for issue in issues:
+                if issue['type'] == 'nullable_fields':
+                    self.fix_nullable_fields(cursor, issue['fields'])
             
             # 优先级2: 修复视力字段类型
             for issue in issues:
@@ -269,6 +296,71 @@ class DatabaseCompatibilityHandler:
                     logger.info(f"  ℹ️  字段已存在: {table}.{field_name}")
                 else:
                     raise
+
+    def check_nullable_fields(self, cursor) -> List[Tuple]:
+        """检查需要改为 nullable 的字段"""
+        needs_nullable = [
+            ('patient', 'phone'),
+        ]
+        result = []
+        for table, field in needs_nullable:
+            cursor.execute(f"PRAGMA table_info({table})")
+            cols = cursor.fetchall()
+            for col in cols:
+                # col: (cid, name, type, notnull, dflt_value, pk)
+                if col[1] == field and col[3] == 1:  # notnull=1 表示有 NOT NULL 约束
+                    result.append((table, field))
+        return result
+
+    def fix_nullable_fields(self, cursor, fields: List[Tuple]):
+        """将指定字段改为允许 NULL（SQLite 需重建表）"""
+        for table, field in fields:
+            try:
+                logger.info(f"  🔧 修复 {table}.{field} 为允许 NULL...")
+                # 获取原表结构
+                cursor.execute(f"PRAGMA table_info({table})")
+                orig_cols = cursor.fetchall()
+
+                # 备份数据到临时表
+                cursor.execute(f"CREATE TABLE {table}_tmp AS SELECT * FROM {table}")
+
+                # 删除原表
+                cursor.execute(f"DROP TABLE {table}")
+
+                # 重建表，去掉目标字段的 NOT NULL
+                col_defs = []
+                for col in orig_cols:
+                    cid, name, ctype, notnull, dflt, pk = col
+                    defn = f"{name} {ctype}"
+                    if pk:
+                        defn += " PRIMARY KEY"
+                    elif notnull and name != field:
+                        defn += " NOT NULL"
+                    if dflt is not None and not pk:
+                        defn += f" DEFAULT {dflt}"
+                    col_defs.append(defn)
+
+                cursor.execute(f"CREATE TABLE {table} ({', '.join(col_defs)})")
+
+                # 恢复数据
+                col_names = ', '.join(c[1] for c in orig_cols)
+                cursor.execute(f"INSERT INTO {table} ({col_names}) SELECT {col_names} FROM {table}_tmp")
+                cursor.execute(f"DROP TABLE {table}_tmp")
+
+                # 重建索引
+                cursor.execute(f"CREATE INDEX IF NOT EXISTS ix_{table}_id ON {table} (id)")
+                cursor.execute(f"CREATE INDEX IF NOT EXISTS ix_{table}_is_deleted ON {table} (is_deleted)")
+
+                logger.info(f"  ✅ {table}.{field} 已改为允许 NULL")
+                self.fixes_applied.append(f"{table}.{field} nullable")
+            except Exception as e:
+                logger.error(f"  ❌ 修复 {table}.{field} nullable 失败: {e}")
+                try:
+                    cursor.execute(f"DROP TABLE IF EXISTS {table}")
+                    cursor.execute(f"ALTER TABLE {table}_tmp RENAME TO {table}")
+                except Exception:
+                    pass
+                raise
     
     def fix_vision_field_types_safe(self, cursor, problematic_fields: List[str]):
         """安全修复视力字段类型 - 不重建表，只标准化数据"""

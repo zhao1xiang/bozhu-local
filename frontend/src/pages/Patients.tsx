@@ -684,10 +684,10 @@ const Patients: React.FC = () => {
           <Button icon={<DownloadOutlined />} onClick={handleExport}>
             导出
           </Button>
-          {/* 批量导入功能暂时隐藏，下个版本发布 */}
-          {/* <Button icon={<UploadOutlined />} onClick={() => setIsImportModalOpen(true)}>
+          {/* 批量导入功能 */}
+          <Button icon={<UploadOutlined />} onClick={() => setIsImportModalOpen(true)}>
             批量导入
-          </Button> */}
+          </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
             添加患者
           </Button>
@@ -730,7 +730,7 @@ const Patients: React.FC = () => {
           <Form.Item name="medical_card_number" label="就诊卡号">
             <Input placeholder="请输入就诊卡号" />
           </Form.Item>
-          <Form.Item name="phone" label="联系方式" rules={[{ required: true, message: '请输入联系方式' }]}>
+          <Form.Item name="phone" label="联系方式 *">
             <Input 
               onBlur={(e) => checkPatientDuplicate('phone', e.target.value)}
             />
@@ -777,11 +777,11 @@ const Patients: React.FC = () => {
             required={patientType === '经治'}
           >
             <Space>
-              <Form.Item name="left_eye" valuePropName="checked" noStyle>
-                <Checkbox>左眼</Checkbox>
-              </Form.Item>
               <Form.Item name="right_eye" valuePropName="checked" noStyle>
                 <Checkbox>右眼</Checkbox>
+              </Form.Item>
+              <Form.Item name="left_eye" valuePropName="checked" noStyle>
+                <Checkbox>左眼</Checkbox>
               </Form.Item>
             </Space>
           </Form.Item>
@@ -797,10 +797,10 @@ const Patients: React.FC = () => {
           <div style={{ marginBottom: 16 }}>
             <div style={{ marginBottom: 8, fontWeight: 500 }}>裸眼视力</div>
             <Space>
-              <Form.Item name="left_vision" label="左眼" style={{ marginBottom: 0 }}>
+              <Form.Item name="right_vision" label="右眼" style={{ marginBottom: 0 }}>
                 <Input placeholder="例: 0.5 或 手动" />
               </Form.Item>
-              <Form.Item name="right_vision" label="右眼" style={{ marginBottom: 0 }}>
+              <Form.Item name="left_vision" label="左眼" style={{ marginBottom: 0 }}>
                 <Input placeholder="例: 0.5 或 手动" />
               </Form.Item>
             </Space>
@@ -808,10 +808,10 @@ const Patients: React.FC = () => {
           <div style={{ marginBottom: 16 }}>
             <div style={{ marginBottom: 8, fontWeight: 500 }}>矫正视力</div>
             <Space>
-              <Form.Item name="left_vision_corrected" label="左眼" style={{ marginBottom: 0 }}>
+              <Form.Item name="right_vision_corrected" label="右眼" style={{ marginBottom: 0 }}>
                 <Input placeholder="例: 0.8 或 手动" />
               </Form.Item>
-              <Form.Item name="right_vision_corrected" label="右眼" style={{ marginBottom: 0 }}>
+              <Form.Item name="left_vision_corrected" label="左眼" style={{ marginBottom: 0 }}>
                 <Input placeholder="例: 0.8 或 手动" />
               </Form.Item>
             </Space>
