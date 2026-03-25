@@ -199,6 +199,10 @@ const PrintCenter: React.FC = () => {
             font-size: 19.2px !important; /* 11px * 1.745 */
           }
           
+          .overlay-text.doctor {
+            font-size: 22.7px !important; /* 13px * 1.745 */
+          }
+          
           .overlay-text.time-1,
           .overlay-text.time-2,
           .overlay-text.time-3,
@@ -325,64 +329,69 @@ const PrintCenter: React.FC = () => {
                 />
 
                 {/* Patient Info Overlay - Row 1: 姓名、联系方式、左眼右眼 */}
-                <span className="overlay-text name" style={{ position: 'absolute', top: '20%', left: '16%', fontSize: '13px', fontWeight: 'bold' }}>
+                <span className="overlay-text name" style={{ position: 'absolute', top: '19.7%', left: '16%', fontSize: '13px', fontWeight: 'bold' }}>
                   {selectedPatient.name}
                 </span>
-                <span className="overlay-text phone" style={{ position: 'absolute', top: '20%', left: '53%', fontSize: '13px', fontWeight: 'bold' }}>
+                <span className="overlay-text phone" style={{ position: 'absolute', top: '19.2%', left: '51%', fontSize: '13px', fontWeight: 'bold' }}>
                   {selectedPatient.phone || ''}
                 </span>
                 {selectedPatient.left_eye && (
-                  <span className="overlay-text checkmark" style={{ position: 'absolute', top: '20%', left: '73%', fontSize: '14px', fontWeight: 'bold' }}>
+                  <span className="overlay-text checkmark" style={{ position: 'absolute', top: '19.3%', left: '72.5%', fontSize: '11px', fontWeight: 'bold' }}>
                     ✓
                   </span>
                 )}
                 {selectedPatient.right_eye && (
-                  <span className="overlay-text checkmark" style={{ position: 'absolute', top: '20%', left: '86%', fontSize: '14px', fontWeight: 'bold' }}>
+                  <span className="overlay-text checkmark" style={{ position: 'absolute', top: '19.3%', left: '85.5%', fontSize: '11px', fontWeight: 'bold' }}>
                     ✓
                   </span>
                 )}
 
                 {/* Patient Info Overlay - Row 2: 诊断、治疗药物、眼视力 */}
-                <span className="overlay-text diagnosis" style={{ position: 'absolute', top: '24%', left: '16%', fontSize: '12px', fontWeight: 'bold' }}>
+                <span className="overlay-text diagnosis" style={{ position: 'absolute', top: '22.9%', left: '16%', fontSize: '12px', fontWeight: 'bold' }}>
                   {selectedPatient.diagnosis || ''}
                 </span>
-                <span className="overlay-text drug" style={{ position: 'absolute', top: '24%', left: '51%', fontSize: '12px', fontWeight: 'bold' }}>
+                <span className="overlay-text drug" style={{ position: 'absolute', top: '22.9%', left: '51%', fontSize: '12px', fontWeight: 'bold' }}>
                   {selectedPatient.drug_type || ''}
                 </span>
-                <span className="overlay-text vision" style={{ position: 'absolute', top: '24%', left: '79%', fontSize: '11px', fontWeight: 'bold' }}>
+                <span className="overlay-text vision" style={{ position: 'absolute', top: '23.5%', left: '79%', fontSize: '11px', fontWeight: 'bold' }}>
                   {selectedPatient.left_vision || selectedPatient.right_vision
                     ? `左${selectedPatient.left_vision || '-'} 右${selectedPatient.right_vision || '-'}`
                     : ''}
                 </span>
 
-                {/* Initial Phase - 第1-4次治疗时间 (治疗时间行) */}
-                <span className="overlay-text time-1" style={{ position: 'absolute', top: '38.8%', left: '28%', fontSize: '12px', fontWeight: 'bold' }}>
+                {/* Patient Info Overlay - Row 3: 医生 */}
+                <span className="overlay-text doctor" style={{ position: 'absolute', top: '27.2%', left: '16%', fontSize: '13px', fontWeight: 'bold' }}>
+                  {appointments[0]?.doctor || ''}
+                </span>
+
+                {/* Initial Phase - 第1-4次治疗时间 */}
+                <span className="overlay-text time-1" style={{ position: 'absolute', top: '40.2%', left: '28%', fontSize: '12px', fontWeight: 'bold' }}>
                   {formatDate(getAppointmentByCount(1)?.appointment_date)}
                 </span>
-                <span className="overlay-text time-2" style={{ position: 'absolute', top: '38.8%', left: '46%', fontSize: '12px', fontWeight: 'bold' }}>
+                <span className="overlay-text time-2" style={{ position: 'absolute', top: '40.2%', left: '46%', fontSize: '12px', fontWeight: 'bold' }}>
                   {formatDate(getAppointmentByCount(2)?.appointment_date)}
                 </span>
-                <span className="overlay-text time-3" style={{ position: 'absolute', top: '38.8%', left: '64%', fontSize: '12px', fontWeight: 'bold' }}>
+                <span className="overlay-text time-3" style={{ position: 'absolute', top: '40.2%', left: '64%', fontSize: '12px', fontWeight: 'bold' }}>
                   {formatDate(getAppointmentByCount(3)?.appointment_date)}
                 </span>
-                <span className="overlay-text time-4" style={{ position: 'absolute', top: '38.8%', left: '82%', fontSize: '12px', fontWeight: 'bold' }}>
+                <span className="overlay-text time-4" style={{ position: 'absolute', top: '40.2%', left: '82%', fontSize: '12px', fontWeight: 'bold' }}>
                   {formatDate(getAppointmentByCount(4)?.appointment_date)}
                 </span>
 
                 {/* Maintenance Phase - 第5-9次 (左列 治疗时间) */}
-                <span className="overlay-text time-5" style={{ position: 'absolute', top: '59%', left: '39%', fontSize: '12px', fontWeight: 'bold' }}>
+                <span className="overlay-text time-5" style={{ position: 'absolute', top: '60.0%', left: '39%', fontSize: '12px', fontWeight: 'bold' }}>
                   {formatDate(getAppointmentByCount(5)?.appointment_date)}
                 </span>
-                <span className="overlay-text time-6" style={{ position: 'absolute', top: '62.5%', left: '39%', fontSize: '12px', fontWeight: 'bold' }}>
+                <span className="overlay-text time-6" style={{ position: 'absolute', top: '63.1%', left: '39%', fontSize: '12px', fontWeight: 'bold' }}>
                   {formatDate(getAppointmentByCount(6)?.appointment_date)}
                 </span>
-                <span className="overlay-text time-7" style={{ position: 'absolute', top: '66%', left: '39%', fontSize: '12px', fontWeight: 'bold' }}>
+                <span className="overlay-text time-7" style={{ position: 'absolute', top: '66.5%', left: '39%', fontSize: '12px', fontWeight: 'bold' }}>
                   {formatDate(getAppointmentByCount(7)?.appointment_date)}
                 </span>
-                <span className="overlay-text time-8" style={{ position: 'absolute', top: '69.5%', left: '39%', fontSize: '12px', fontWeight: 'bold' }}>
+                <span className="overlay-text time-8" style={{ position: 'absolute', top: '70.0%', left: '39%', fontSize: '12px', fontWeight: 'bold' }}>
                   {formatDate(getAppointmentByCount(8)?.appointment_date)}
                 </span>
-                <span className="overlay-text time-9" style={{ position: 'absolute', top: '73%', left: '39%', fontSize: '12px', fontWeight: 'bold' }}>
+                <span className="overlay-text time-9" style={{ position: 'absolute', top: '73.5%', left: '39%', fontSize: '12px', fontWeight: 'bold' }}>
                   {formatDate(getAppointmentByCount(9)?.appointment_date)}
                 </span>
 
