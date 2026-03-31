@@ -102,8 +102,15 @@ def get_reinjection_rate(session: Session = Depends(get_session)):
         )
     ).one() or 0
 
-    # 巩固期：患者数（去重）
-    gj_count = session.exec(
+    # 巩固期：条数 / 巩固期去重患者数
+    gj_appt_count = session.exec(
+        select(func.count(Appointment.id)).where(
+            Appointment.is_deleted == False,
+            Appointment.treatment_phase == "巩固期",
+        )
+    ).one() or 0
+
+    gj_patient_count = session.exec(
         select(func.count(distinct(Appointment.patient_id))).where(
             Appointment.is_deleted == False,
             Appointment.treatment_phase == "巩固期",
@@ -112,7 +119,7 @@ def get_reinjection_rate(session: Session = Depends(get_session)):
 
     return {
         "强化期": round(qh_count / denominator * 100, 1),
-        "巩固期": round(gj_count / denominator * 100, 1),
+        "巩固期": round(gj_appt_count / gj_patient_count * 100, 1) if gj_patient_count > 0 else 0,
     }
 
 

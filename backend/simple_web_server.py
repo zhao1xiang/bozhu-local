@@ -358,6 +358,15 @@ def open_browser_delayed(url, delay=3):
 
 def main():
     """主函数"""
+    # 启动后隐藏控制台窗口（日志仍写入文件）
+    try:
+        import ctypes
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE = 0
+    except Exception:
+        pass
+
     # 初始化日志
     logger = setup_logging()
     

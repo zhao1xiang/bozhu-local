@@ -75,6 +75,7 @@ export interface Appointment {
   pre_op_cst_left?: number;
   pre_op_cst_right?: number;
   treatment_phase?: string;
+  condition_status?: string;
 }
 
 export interface AppointmentBase {
@@ -121,6 +122,7 @@ export interface DataDictionaryItem {
   label: string;
   sort_order: number;
   is_active: boolean;
+  extra?: string;
   created_at: string;
 }
 

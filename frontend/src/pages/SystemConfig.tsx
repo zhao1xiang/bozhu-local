@@ -10,6 +10,7 @@ interface DataDictionaryItem {
   label: string;
   sort_order: number;
   is_active: boolean;
+  extra?: string;
   created_at: string;
 }
 
@@ -52,7 +53,10 @@ const DictionaryTable: React.FC<{ category: string, title: string }> = ({ catego
 
   const handleEdit = (item: DataDictionaryItem) => {
     setEditingItem(item);
-    form.setFieldsValue(item);
+    form.setFieldsValue({
+      ...item,
+      extra: item.extra ? item.extra.split(',').filter(Boolean) : [],
+    });
     setIsModalOpen(true);
   };
 
@@ -72,6 +76,10 @@ const DictionaryTable: React.FC<{ category: string, title: string }> = ({ catego
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
+      // extra 字段：多选数组转逗号字符串
+      if (Array.isArray(values.extra)) {
+        values.extra = values.extra.join(',');
+      }
       if (editingItem) {
         await apiClient.put(`/data-dictionary/${editingItem.id}`, values);
         message.success('更新成功');
@@ -98,6 +106,11 @@ const DictionaryTable: React.FC<{ category: string, title: string }> = ({ catego
     return examples[category as keyof typeof examples]?.[field] || `例如：${title}名称`;
   };
 
+  const WEEKDAY_MAP: Record<string, string> = {
+    '1': '周一', '2': '周二', '3': '周三', '4': '周四',
+    '5': '周五', '6': '周六', '7': '周日'
+  };
+
   const columns = [
     {
       title: '显示名称',
@@ -109,6 +122,15 @@ const DictionaryTable: React.FC<{ category: string, title: string }> = ({ catego
       dataIndex: 'value',
       key: 'value',
     },
+    ...(category === 'doctor' ? [{
+      title: '玻注日',
+      dataIndex: 'extra',
+      key: 'extra',
+      render: (extra: string) => {
+        if (!extra) return <span style={{ color: '#999' }}>全局配置</span>;
+        return extra.split(',').filter(Boolean).map(d => WEEKDAY_MAP[d] || d).join('、');
+      }
+    }] : []),
     {
       title: '排序',
       dataIndex: 'sort_order',
@@ -159,6 +181,28 @@ const DictionaryTable: React.FC<{ category: string, title: string }> = ({ catego
           <Form.Item name="value" label="值" rules={[{ required: true }]}>
             <Input placeholder={getPlaceholderText('value')} />
           </Form.Item>
+          {category === 'doctor' && (
+            <Form.Item
+              name="extra"
+              label="玻注日"
+              extra="该医生的玻注日，不设置则使用全局配置"
+            >
+              <Select
+                mode="multiple"
+                placeholder="选择玻注日（可多选，不选则用全局配置）"
+                allowClear
+                options={[
+                  { label: '周一', value: '1' },
+                  { label: '周二', value: '2' },
+                  { label: '周三', value: '3' },
+                  { label: '周四', value: '4' },
+                  { label: '周五', value: '5' },
+                  { label: '周六', value: '6' },
+                  { label: '周日', value: '7' },
+                ]}
+              />
+            </Form.Item>
+          )}
           <Form.Item name="sort_order" label="排序 (越小越靠前)">
             <InputNumber style={{ width: '100%' }} />
           </Form.Item>
@@ -191,7 +235,6 @@ const GeneralSettings: React.FC = () => {
 
       form.setFieldsValue({
         reminder_days_advance: Number(reminderResp.data.value),
-        // 玻注日：后端以逗号分隔字符串存储，这里还原为多选数组
         injection_weekday: weekdayResp.data.value
           ? String(weekdayResp.data.value).split(',').filter(Boolean)
           : [],
@@ -202,7 +245,7 @@ const GeneralSettings: React.FC = () => {
       console.error(error);
       form.setFieldsValue({
         reminder_days_advance: 3,
-        injection_weekday: ['1'], // 默认周一
+        injection_weekday: ['1'],
         injection_interval_first_4: 30,
         print_phone_number: '',
       });
@@ -219,7 +262,6 @@ const GeneralSettings: React.FC = () => {
           description: '提前提醒天数'
         }),
         apiClient.put('/system-settings/injection_weekday', {
-          // 多选的玻注日使用逗号分隔字符串进行存储，例如 "1,3,5"
           value: Array.isArray(values.injection_weekday)
             ? values.injection_weekday.join(',')
             : values.injection_weekday?.toString() || '',
@@ -234,7 +276,6 @@ const GeneralSettings: React.FC = () => {
           description: '打印页面显示的联系电话'
         })
       ]);
-
       message.success('保存成功');
     } catch (error) {
       console.error(error);
@@ -268,8 +309,8 @@ const GeneralSettings: React.FC = () => {
 
         <Form.Item
           name="injection_weekday"
-          label="玻注日"
-          extra="可多选，批量预约时默认选择的注药星期"
+          label="全局玻注日"
+          extra="医生未单独配置玻注日时使用此全局配置"
           rules={[{ required: true, message: '请选择玻注日' }]}
         >
           <Select

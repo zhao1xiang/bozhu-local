@@ -202,7 +202,10 @@ class DatabaseCompatibilityHandler:
                     ('follow_up_date', 'TEXT', ''),
                     ('next_follow_up_date', 'TEXT', ''),
                     ('diagnosis', 'TEXT', ''),
-                ]
+                ],
+                'data_dictionary': [
+                    ('extra', 'TEXT', ''),
+                ],
             }
             
             missing = []
@@ -216,6 +219,13 @@ class DatabaseCompatibilityHandler:
             for field_name, field_type, default in required_fields['appointment']:
                 if field_name not in existing_appt_columns:
                     missing.append(('appointment', field_name, field_type, default))
+
+            # 检查数据字典表
+            cursor.execute("PRAGMA table_info(data_dictionary)")
+            existing_dict_columns = [col[1] for col in cursor.fetchall()]
+            for field_name, field_type, default in required_fields['data_dictionary']:
+                if field_name not in existing_dict_columns:
+                    missing.append(('data_dictionary', field_name, field_type, default))
             
             return missing
             

@@ -144,7 +144,8 @@ const Appointments: React.FC = () => {
         follow_up_date: date,
         injection_count: injectionCount,
         treatment_phase: injectionCount > 4 ? '巩固期' : '强化期',
-        time_slot: '上午'
+        time_slot: '上午',
+        condition_status: '稳定',
       });
       
       // 计算下一针的日期
@@ -397,7 +398,8 @@ const Appointments: React.FC = () => {
           follow_up_date: firstInjectionDate, 
           injection_count: nextInjectionCount,
           treatment_phase: treatmentPhase,
-          time_slot: '上午'
+          time_slot: '上午',
+          condition_status: '稳定',
         }
       ]
     };
@@ -559,7 +561,8 @@ const Appointments: React.FC = () => {
           follow_up_date: firstInjectionDate,
           injection_count: nextInjectionCount,
           treatment_phase: treatmentPhase,
-          time_slot: '上午'
+          time_slot: '上午',
+          condition_status: '稳定',
         }]
       });
       
@@ -643,6 +646,7 @@ const Appointments: React.FC = () => {
           injection_count: item.injection_count,
           injection_number: item.injection_number,
           treatment_phase: item.treatment_phase,
+          condition_status: item.condition_status ?? '稳定',
           next_follow_up_date: item.next_follow_up_date ? item.next_follow_up_date.format('YYYY-MM-DD') : undefined,
           status: 'scheduled',
         }));
@@ -1047,7 +1051,8 @@ const Appointments: React.FC = () => {
                             follow_up_date: nextDate,
                             injection_count: nextInjectionCount,
                             treatment_phase: nextInjectionCount > 4 ? '巩固期' : '强化期',
-                            time_slot: '上午'
+                            time_slot: '上午',
+                            condition_status: '稳定',
                           });
                         } else {
                           const base = dayjs();
@@ -1057,7 +1062,8 @@ const Appointments: React.FC = () => {
                             follow_up_date: nextDate,
                             injection_count: 1,
                             treatment_phase: '强化期',
-                            time_slot: '上午'
+                            time_slot: '上午',
+                            condition_status: '稳定',
                           });
                         }
                       }} block icon={<PlusOutlined />}>
