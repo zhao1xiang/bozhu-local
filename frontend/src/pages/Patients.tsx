@@ -705,6 +705,7 @@ const Patients: React.FC = () => {
       <Modal
         title={editingPatient ? '编辑患者' : '添加患者'}
         open={isModalOpen}
+        maskClosable={false}
         onCancel={() => setIsModalOpen(false)}
         footer={[
           <Button key="cancel" onClick={() => setIsModalOpen(false)}>
@@ -741,6 +742,7 @@ const Patients: React.FC = () => {
               placeholder="请选择诊断（可多选）" 
               showSearch
               maxTagCount="responsive"
+              onSelect={() => (document.activeElement as HTMLElement)?.blur()}
             >
               {diagnoses.filter(d => d.value !== '其他').map(d => (
                 <Select.Option key={d.id} value={d.value}>{d.label}</Select.Option>
@@ -756,6 +758,7 @@ const Patients: React.FC = () => {
               mode="multiple" 
               placeholder="请选择治疗药物（可多选）"
               maxTagCount="responsive"
+              onSelect={() => (document.activeElement as HTMLElement)?.blur()}
             >
               {drugs.filter(d => d.value !== '其他').map(d => (
                 <Select.Option key={d.id} value={d.value}>{d.label}</Select.Option>

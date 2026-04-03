@@ -910,6 +910,7 @@ const Appointments: React.FC = () => {
       <Modal
         title={editingId ? "编辑预约" : "新建预约"}
         open={isModalOpen}
+        maskClosable={false}
         onCancel={() => setIsModalOpen(false)}
         width={800}
         footer={[

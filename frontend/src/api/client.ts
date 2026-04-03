@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // 支持环境变量配置 API 地址
-// 本地部署版使用 127.0.0.1:38125/api
+// 本地部署版使用 127.0.0.1:38126/api
 // 服务器版使用相对路径 /api（通过 Nginx 等反向代理）
 // 局域网部署版使用当前 IP:8031/api
 // 可以通过 VITE_API_URL 环境变量配置
@@ -10,7 +10,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || (() => {
   const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
   const isProduction = import.meta.env.MODE === 'production';
   
-  // 本地开发或 localhost 访问 -> 使用 127.0.0.1:38125
+  // 本地开发或 localhost 访问 -> 使用 127.0.0.1:38126
   if (isLocalhost) {
     return 'http://127.0.0.1:38125/api';
   }
@@ -19,7 +19,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || (() => {
   if (isProduction) {
     // 如果是局域网 IP（192.168.x.x, 10.x.x.x, 172.16-31.x.x）
     if (hostname.match(/^(192\.168|10\.|172\.(1[6-9]|2[0-9]|3[01]))\./)) {
-      // 局域网 IP 访问 -> 使用当前 IP:38125（本地版端口）
+      // 局域网 IP 访问 -> 使用当前 IP:38126（本地版端口）
       return `http://${hostname}:38125/api`;
     }
     // 其他情况（域名、公网 IP）-> 使用相对路径（通过 Nginx 反向代理）
@@ -32,15 +32,15 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || (() => {
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000, // 增加到 30 秒，给后端更多启动时间
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
 // 重试配置
-const MAX_RETRIES = 5; // 增加到 5 次
-const RETRY_DELAY = 3000; // 增加到 3 秒
+const MAX_RETRIES = 5;
+const RETRY_DELAY = 3000;
 
 // 延迟函数
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -48,7 +48,6 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // Request interceptor for retry logic
 apiClient.interceptors.request.use(
   (config) => {
-    // 添加重试计数
     config.headers['X-Retry-Count'] = config.headers['X-Retry-Count'] || '0';
     return config;
   },
@@ -61,15 +60,12 @@ apiClient.interceptors.response.use(
   async (error) => {
     const config = error.config;
     
-    // 如果是网络错误或超时，尝试重试
     if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK' || error.message.includes('timeout')) {
       const retryCount = parseInt(config.headers['X-Retry-Count'] || '0');
       
       if (retryCount < MAX_RETRIES) {
         config.headers['X-Retry-Count'] = (retryCount + 1).toString();
         console.log(`后端连接失败，${RETRY_DELAY / 1000} 秒后重试 (${retryCount + 1}/${MAX_RETRIES})...`);
-        
-        // 等待后重试
         await delay(RETRY_DELAY);
         return apiClient(config);
       } else {
@@ -82,4 +78,3 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-

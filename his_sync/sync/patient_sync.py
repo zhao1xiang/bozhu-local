@@ -117,23 +117,28 @@ def upsert_patient(cur, p):
         exists = cur.fetchone()
 
         if exists:
-            # 更新现有记录，包括空字符串值
+            # 更新现有记录
             update_fields = ["name=?", "updated_at=?"]
             update_values = [name, datetime.now()]
-            
-            # 总是更新这些字段，即使是 None 或空字符串
-            update_fields.extend([
-                "medical_card_number=?",
-                "phone=?", 
-                "diagnosis=?",
-                "patient_type=?"
-            ])
-            update_values.extend([
-                medical_card_number,
-                phone,
-                diagnosis,
-                patient_type
-            ])
+
+            # medical_card_number 总是更新
+            update_fields.append("medical_card_number=?")
+            update_values.append(medical_card_number)
+
+            # phone 为空时不更新
+            if phone:
+                update_fields.append("phone=?")
+                update_values.append(phone)
+
+            # diagnosis 为空时不更新
+            if diagnosis:
+                update_fields.append("diagnosis=?")
+                update_values.append(diagnosis)
+
+            # patient_type 为空时不更新
+            if patient_type:
+                update_fields.append("patient_type=?")
+                update_values.append(patient_type)
             
             update_values.append(outpatient_number)  # WHERE 条件
             
