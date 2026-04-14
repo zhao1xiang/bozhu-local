@@ -42,14 +42,12 @@ def create_patient(patient: PatientBase, session: Session = Depends(get_session)
     return db_patient
 
 @router.get("/", response_model=List[Patient])
-def read_patients(skip: int = 0, limit: int = 99999, session: Session = Depends(get_session)):
+def read_patients(skip: int = 0, limit: int = 99999, outpatient_number: str = None, session: Session = Depends(get_session)):
     try:
-        patients = session.exec(
-            select(Patient)
-            .where(Patient.is_deleted == False)
-            .order_by(Patient.created_at.desc())
-            .offset(skip).limit(limit)
-        ).all()
+        q = select(Patient).where(Patient.is_deleted == False)
+        if outpatient_number:
+            q = q.where(Patient.outpatient_number == outpatient_number)
+        patients = session.exec(q.order_by(Patient.created_at.desc()).offset(skip).limit(limit)).all()
         return patients
     except Exception as e:
         import traceback

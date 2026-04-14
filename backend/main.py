@@ -72,6 +72,9 @@ app.include_router(follow_ups.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 
+from routers.embed import router as embed_router
+app.include_router(embed_router, prefix="/api")
+
 @app.get("/fix-admin")
 def fix_admin():
     from security import get_password_hash

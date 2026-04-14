@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Table, Button, Input, Space, Modal, Form, Select, Checkbox, InputNumber, message, DatePicker, Tag, Radio, Upload } from 'antd';
-import { PlusOutlined, SearchOutlined, EditOutlined, ProjectOutlined, CalendarOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons';
+import { PlusOutlined, SearchOutlined, EditOutlined, ProjectOutlined, CalendarOutlined, DownloadOutlined, UploadOutlined, LinkOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { Patient, DataDictionaryItem, Appointment } from '@/types';
 import { apiClient } from '@/api/client';
@@ -16,6 +16,7 @@ const Patients: React.FC = () => {
   const [drugs, setDrugs] = useState<DataDictionaryItem[]>([]);
   const [diagnoses, setDiagnoses] = useState<DataDictionaryItem[]>([]);
   const [searchText, setSearchText] = useState('');
+  const [dateRange, setDateRange] = useState<[any, any] | null>(null);
   const [diagnosisFilter, setDiagnosisFilter] = useState<string | undefined>(undefined);
   const [drugFilter, setDrugFilter] = useState<string | undefined>(undefined);
   const [eyeFilter, setEyeFilter] = useState<string | undefined>(undefined);
@@ -31,6 +32,12 @@ const Patients: React.FC = () => {
   // Import Modal State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importing, setImporting] = useState(false);
+
+  // Embed Link Modal State
+  const [isEmbedModalOpen, setIsEmbedModalOpen] = useState(false);
+  const [embedForm] = Form.useForm();
+  const [embedUrl, setEmbedUrl] = useState<string>('');
+  const [doctors, setDoctors] = useState<DataDictionaryItem[]>([]);
 
   const [form] = Form.useForm();
   
@@ -69,6 +76,8 @@ const Patients: React.FC = () => {
             setEditingPatient(existingPatient);
             form.setFieldsValue({
               ...existingPatient,
+              diagnosis: existingPatient.diagnosis ? existingPatient.diagnosis.split(',').map((s: string) => s.trim()) : [],
+              drug_type: existingPatient.drug_type ? existingPatient.drug_type.split(',').map((s: string) => s.trim()) : [],
             });
             message.info('已加载患者信息，你可以继续编辑');
           }
@@ -82,14 +91,16 @@ const Patients: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [patientsRes, drugsRes, diagnosesRes] = await Promise.all([
+      const [patientsRes, drugsRes, diagnosesRes, doctorsRes] = await Promise.all([
         apiClient.get<Patient[]>('/patients'),
         apiClient.get<DataDictionaryItem[]>('/data-dictionary', { params: { category: 'drug' } }),
         apiClient.get<DataDictionaryItem[]>('/data-dictionary', { params: { category: 'diagnosis' } }),
+        apiClient.get<DataDictionaryItem[]>('/data-dictionary', { params: { category: 'doctor' } }),
       ]);
       setPatients(Array.isArray(patientsRes.data) ? patientsRes.data : []);
       setDrugs(Array.isArray(drugsRes.data) ? drugsRes.data.filter(d => d.is_active) : []);
       setDiagnoses(Array.isArray(diagnosesRes.data) ? diagnosesRes.data.filter(d => d.is_active) : []);
+      setDoctors(Array.isArray(doctorsRes.data) ? doctorsRes.data.filter(d => d.is_active) : []);
     } catch (error) {
       console.error(error);
       message.error('获取患者数据失败');
@@ -262,7 +273,7 @@ const Patients: React.FC = () => {
 
     const PATIENT_HEADERS = ['姓名', '门诊号', '就诊卡号', '联系方式', '患者类型', '针数(右眼)', '针数(左眼)', '眼底病诊断'];
     const TREATMENT_SUB_HEADERS = [
-      '治疗日期', '注药号', '治疗眼', '治疗药物', '费别', '治疗阶段',
+      '治疗日期', '时间段', '注药号', '治疗眼', '治疗药物', '费别', '治疗阶段',
       '针数（右眼）', '针数（左眼）', '裸眼视力（右眼）', '裸眼视力（左眼）', 
       '左眼压', '右眼压', '血压', '血糖', '冲眼结果', '病毒报告',
       '复诊日期', '注药医生', '管床医生'
@@ -366,6 +377,7 @@ const Patients: React.FC = () => {
         const countLeftVal = (eye === '左眼' || eye === '双眼') ? count : '';
         rowData.push(
           a.appointment_date ? dayjs(a.appointment_date).format('YYYY-MM-DD') : '',
+          a.time_slot ?? '',
           a.injection_number ?? '',
           eye,
           a.drug_name ?? '',
@@ -646,6 +658,11 @@ const Patients: React.FC = () => {
             style={{ width: 200 }}
             onChange={(e) => setSearchText(e.target.value)}
           />
+          <DatePicker.RangePicker
+            placeholder={['建档开始时间', '建档结束时间']}
+            style={{ width: 240 }}
+            onChange={(dates) => setDateRange(dates as [any, any] | null)}
+          />
           <Select
             placeholder="诊断"
             style={{ width: 150 }}
@@ -691,11 +708,20 @@ const Patients: React.FC = () => {
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
             添加患者
           </Button>
+          <Button icon={<LinkOutlined />} onClick={() => { embedForm.resetFields(); setEmbedUrl(''); setIsEmbedModalOpen(true); }}>
+            预约链接
+          </Button>
         </Space>
       </div>
       <Table 
         columns={columns} 
-        dataSource={patients} 
+        dataSource={patients.filter(p => {
+          const matchText = !searchText || p.name.includes(searchText) || (p.phone?.includes(searchText) ?? false) || (p.outpatient_number?.includes(searchText) ?? false);
+          const matchDate = !dateRange || !dateRange[0] || !dateRange[1] || (
+            p.created_at && dayjs(p.created_at).isAfter(dateRange[0].startOf('day')) && dayjs(p.created_at).isBefore(dateRange[1].endOf('day'))
+          );
+          return matchText && matchDate;
+        })} 
         rowKey="id" 
         loading={loading}
         pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `共 ${total} 条`, pageSizeOptions: ['10', '20', '50', '100'] }}
@@ -901,6 +927,87 @@ const Patients: React.FC = () => {
             </ul>
           </div>
         </div>
+      </Modal>
+
+      {/* Embed Link Modal */}
+      <Modal
+        title="生成预约链接"
+        open={isEmbedModalOpen}
+        onCancel={() => { setIsEmbedModalOpen(false); setEmbedUrl(''); }}
+        footer={null}
+        width={900}
+        styles={{ body: { padding: '16px 24px' } }}
+        destroyOnClose
+      >
+        <Form
+          form={embedForm}
+          layout="inline"
+          style={{ flexWrap: 'wrap', gap: 8, marginBottom: 16 }}
+          initialValues={{ injection_count: 0 }}
+          onFinish={(values) => {
+            const injectionCount = values.injection_count || 0;
+            const patientType = injectionCount >= 1 ? '经治' : '初治';
+            const payload = {
+              name: values.name || '',
+              outpatient_number: values.outpatient_number || '',
+              phone: values.phone || '',
+              diagnosis: values.diagnosis || '',
+              drug_name: values.drug_name || '',
+              eye: values.eye || '',
+              injection_count: injectionCount,
+              doctor: values.doctor || '',
+              patient_type: patientType,
+              timestamp: Math.floor(Date.now() / 1000),
+            };
+            apiClient.post('/embed/generate-link', { payload }).then(res => {
+              setEmbedUrl(res.data.url);
+            }).catch(() => {
+              message.error('生成链接失败');
+            });
+          }}
+        >
+          <Form.Item name="name" label="姓名" style={{ marginBottom: 8 }} rules={[{ required: true, message: '必填' }]}>
+            <Input placeholder="姓名" style={{ width: 100 }} />
+          </Form.Item>
+          <Form.Item name="outpatient_number" label="住院号" style={{ marginBottom: 8 }} rules={[{ required: true, message: '必填' }]}>
+            <Input placeholder="住院号" style={{ width: 110 }} />
+          </Form.Item>
+          <Form.Item name="phone" label="联系方式" style={{ marginBottom: 8 }} rules={[{ required: true, message: '必填' }]}>
+            <Input placeholder="手机号" style={{ width: 130 }} />
+          </Form.Item>
+          <Form.Item name="diagnosis" label="诊断" style={{ marginBottom: 8 }} rules={[{ required: true, message: '必填' }]}>
+            <Select placeholder="诊断" style={{ width: 100 }} allowClear options={(diagnoses || []).map(d => ({ label: d.value, value: d.value }))} />
+          </Form.Item>
+          <Form.Item name="drug_name" label="用药" style={{ marginBottom: 8 }} rules={[{ required: true, message: '必填' }]}>
+            <Select placeholder="用药" style={{ width: 110 }} allowClear options={(drugs || []).map(d => ({ label: d.value, value: d.value }))} />
+          </Form.Item>
+          <Form.Item name="eye" label="治疗眼" style={{ marginBottom: 8 }} rules={[{ required: true, message: '必填' }]}>
+            <Select placeholder="眼别" style={{ width: 90 }} options={[{ label: '左眼', value: '左眼' }, { label: '右眼', value: '右眼' }, { label: '双眼', value: '双眼' }]} />
+          </Form.Item>
+          <Form.Item name="injection_count" label="针次" style={{ marginBottom: 8 }}>
+            <InputNumber min={0} placeholder="针次" style={{ width: 70 }} />
+          </Form.Item>
+          <Form.Item name="doctor" label="医生" style={{ marginBottom: 8 }} rules={[{ required: true, message: '必填' }]}>
+            <Select placeholder="医生" style={{ width: 100 }} allowClear options={(doctors || []).map(d => ({ label: d.value, value: d.value }))} />
+          </Form.Item>
+          <Form.Item style={{ marginBottom: 8 }}>
+            <Button type="primary" htmlType="submit">生成链接</Button>
+          </Form.Item>
+        </Form>
+
+        {embedUrl && (
+          <div>
+            <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Input value={embedUrl} readOnly style={{ flex: 1, fontSize: 12 }} />
+              <Button size="small" onClick={() => { navigator.clipboard.writeText(embedUrl); message.success('已复制'); }}>复制</Button>
+            </div>
+            <iframe
+              src={embedUrl}
+              style={{ width: '100%', height: 520, border: '1px solid #e5e7eb', borderRadius: 8 }}
+              title="预约页面"
+            />
+          </div>
+        )}
       </Modal>
     </div>
   );

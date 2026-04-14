@@ -186,6 +186,7 @@ class DatabaseCompatibilityHandler:
                     ('right_eye_pressure', 'TEXT', ''),
                     ('eye_wash_result', 'TEXT', ''),
                     ('is_deleted', 'INTEGER', '0'),
+                    ('source', 'TEXT', ''),
                     ('drug_name_other', 'TEXT', ''),
                     ('pre_op_vision_left', 'TEXT', ''),
                     ('pre_op_vision_right', 'TEXT', ''),

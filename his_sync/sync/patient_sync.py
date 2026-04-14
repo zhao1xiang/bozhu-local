@@ -107,6 +107,9 @@ def upsert_patient(cur, p):
     phone = p.get("phone")
     diagnosis = p.get("diagnosis")
     patient_type = p.get("patient_type")
+    left_eye = p.get("left_eye")
+    right_eye = p.get("right_eye")
+    injection_count = p.get("injection_count")
 
     if outpatient_number:
         # 检查是否存在
@@ -139,6 +142,19 @@ def upsert_patient(cur, p):
             if patient_type:
                 update_fields.append("patient_type=?")
                 update_values.append(patient_type)
+
+            # left_eye/right_eye 不为 None 时更新
+            if left_eye is not None:
+                update_fields.append("left_eye=?")
+                update_values.append(left_eye)
+            if right_eye is not None:
+                update_fields.append("right_eye=?")
+                update_values.append(right_eye)
+
+            # injection_count 有值时更新
+            if injection_count is not None:
+                update_fields.append("injection_count=?")
+                update_values.append(injection_count)
             
             update_values.append(outpatient_number)  # WHERE 条件
             
@@ -155,8 +171,8 @@ def upsert_patient(cur, p):
                 """
                 INSERT INTO patient
                 (id, name, outpatient_number, medical_card_number, phone, 
-                 diagnosis, patient_type, left_eye, right_eye, status, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                 diagnosis, patient_type, left_eye, right_eye, injection_count, status, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     str(uuid.uuid4()),
@@ -166,11 +182,12 @@ def upsert_patient(cur, p):
                     phone,
                     diagnosis,
                     patient_type,
-                    False,  # left_eye 默认值
-                    False,  # right_eye 默认值
-                    'active',  # status 默认值
-                    datetime.now(),  # created_at
-                    datetime.now()   # updated_at
+                    left_eye if left_eye is not None else False,
+                    right_eye if right_eye is not None else False,
+                    injection_count,
+                    'active',
+                    datetime.now(),
+                    datetime.now()
                 )
             )
             return "inserted"
@@ -180,8 +197,8 @@ def upsert_patient(cur, p):
             """
             INSERT INTO patient
             (id, name, outpatient_number, medical_card_number, phone,
-             diagnosis, patient_type, left_eye, right_eye, status, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+             diagnosis, patient_type, left_eye, right_eye, injection_count, status, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 str(uuid.uuid4()),
@@ -191,8 +208,9 @@ def upsert_patient(cur, p):
                 phone,
                 diagnosis,
                 patient_type,
-                False,
-                False,
+                left_eye if left_eye is not None else False,
+                right_eye if right_eye is not None else False,
+                injection_count,
                 'active',
                 datetime.now(),
                 datetime.now()
@@ -243,6 +261,9 @@ def sync_patient():
             for i, row in enumerate(rows, 1):
                 try:
                     patient_data = convert_patient(row)
+                    if patient_data is None:
+                        # 适配器返回 None 表示跳过此记录
+                        continue
                     operation = upsert_patient(local_cursor, patient_data)
                     stats[operation] += 1
                     

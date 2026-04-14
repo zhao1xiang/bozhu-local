@@ -17,6 +17,7 @@ from routers.system_settings import router as system_settings_router
 from routers.follow_ups import router as follow_ups_router
 from routers.dashboard import router as dashboard_router
 from routers.auth import router as auth_router
+from routers.embed import router as embed_router
 from models.user import User
 from sqlmodel import Session, select
 from security import get_password_hash
@@ -89,6 +90,7 @@ async def lifespan(app: FastAPI):
         default_settings = [
             ('injection_interval_first_4', '30', '前4针注射间隔（天）'),
             ('print_phone_number', '', '打印页面显示的联系电话'),
+            ('embed_secret_key', 'bozhu_secret_2024', 'iframe嵌入接口签名密钥'),
         ]
         for key, value, description in default_settings:
             setting = session.exec(select(SystemSetting).where(SystemSetting.key == key)).first()
@@ -127,6 +129,7 @@ app.include_router(system_settings_router, prefix="/api")
 app.include_router(follow_ups_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
+app.include_router(embed_router, prefix="/api")
 
 
 @app.get("/health")
@@ -143,10 +146,10 @@ if os.path.exists(frontend_dir):
     async def read_root():
         return FileResponse(f"{frontend_dir}/index.html")
 
+    # 根目录静态文件（logo.png, print-template.png 等）
     @app.get("/{filename}")
-    async def serve_static_files(filename: str):
-        static_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
-                              '.woff', '.woff2', '.ttf', '.eot', '.json', '.xml', '.txt']
+    async def serve_root_static(filename: str):
+        static_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.txt']
         if any(filename.endswith(ext) for ext in static_extensions):
             file_path = os.path.join(frontend_dir, filename)
             if os.path.exists(file_path):
@@ -155,8 +158,10 @@ if os.path.exists(frontend_dir):
 
     @app.exception_handler(404)
     async def custom_404_handler(request: Request, exc):
+        # API 请求返回 JSON 404
         if request.url.path.startswith("/api/"):
             return JSONResponse(status_code=404, content={"detail": "Not Found"})
+        # 其他路径（SPA 路由）返回 index.html
         return FileResponse(f"{frontend_dir}/index.html")
 
 else:

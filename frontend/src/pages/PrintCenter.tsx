@@ -1,10 +1,34 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, Select, Button, message, Space, Descriptions, Empty } from 'antd';
 import { PrinterOutlined, ReloadOutlined } from '@ant-design/icons';
 import { Patient, Appointment } from '@/types';
 import { apiClient } from '@/api/client';
 import dayjs from 'dayjs';
+
+const colors = {
+  blue: '#1677f7',
+  blueBg: '#f0f5ff',
+  blueBorder: '#adcf6',
+  text1: '#1d2939',
+  text2: '#6b7280',
+};
+
+interface AppTitem {
+  id?: string;
+  appointment_date?: string;
+  follow_up_date?: string;
+  injection_count?: number;
+  treatment_phase?: string;
+  time_slot?: string;
+  condition_status?: string;
+  eye?: string;
+  drug_name?: string;
+  doctor?: string;
+  status?: string;
+  source?: string;
+  is_new?: boolean;
+}
 
 const PrintCenter: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -13,19 +37,18 @@ const PrintCenter: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(false);
   const [printPhoneNumber, setPrintPhoneNumber] = useState<string>('');
+  const autoPrintRef = useRef(false);
 
-  // 安全地查找选中的患者，防止 null 错误
   const selectedPatient = patients?.find(p => p.id === selectedPatientId);
 
   const fetchPatients = async () => {
     try {
       const response = await apiClient.get<Patient[]>('/patients');
-      // 确保返回的是数组
       setPatients(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error(error);
       message.error('获取患者列表失败');
-      setPatients([]); // 出错时设置为空数组
+      setPatients([]);
     }
   };
 
@@ -33,11 +56,9 @@ const PrintCenter: React.FC = () => {
     setLoading(true);
     try {
       const response = await apiClient.get<Appointment[]>('/appointments', {
-        params: { patient_id: patientId, limit: 100 }
+        params: { patient_id: patientId, limit: 100 },
       });
-      // 确保返回的是数组
       const data = Array.isArray(response.data) ? response.data : [];
-      // Sort by injection_count
       const sorted = data
         .filter(a => a.patient_id === patientId)
         .sort((a, b) => (a.injection_count || 0) - (b.injection_count || 0));
@@ -45,23 +66,23 @@ const PrintCenter: React.FC = () => {
     } catch (error) {
       console.error(error);
       message.error('获取预约列表失败');
-      setAppointments([]); // 出错时设置为空数组
+      setAppointments([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchPrintPhone = async () => {
+    try {
+      const response = await apiClient.get('/system-settings/print_phone_number');
+      setPrintPhoneNumber(response.data.value || '');
+    } catch (error) {
+      console.error('获取打印电话号码失败', error);
+    }
+  };
+
   useEffect(() => {
     fetchPatients();
-    // 获取打印电话号码配置
-    const fetchPrintPhone = async () => {
-      try {
-        const response = await apiClient.get('/system-settings/print_phone_number');
-        setPrintPhoneNumber(response.data.value || '');
-      } catch (error) {
-        console.error('获取打印电话配置失败:', error);
-      }
-    };
     fetchPrintPhone();
   }, []);
 
@@ -80,11 +101,11 @@ const PrintCenter: React.FC = () => {
     }
   }, [selectedPatientId]);
 
-  const getAppointmentByCount = (count: number) => {
-    return appointments.find(a => a.injection_count === count);
+  const getAppointmentByCount = (appts: Appointment[], count: number): AppTitem | undefined => {
+    return appts?.find(a => a.injection_count === count);
   };
 
-  const formatDate = (dateStr?: string) => {
+  const formatDate = (dateStr?: string): string => {
     if (!dateStr) return '';
     return dayjs(dateStr).format('M月D日');
   };
@@ -92,157 +113,55 @@ const PrintCenter: React.FC = () => {
   const handlePrint = () => {
     const printArea = document.getElementById('print-area');
     if (!printArea) {
-      message.error('打印区域未找到，请刷新页面重试');
+      message.error('打印区域未找到，请先选择患者');
       return;
     }
 
     try {
       message.info('正在准备打印...');
-      
-      // 添加打印样式 - 保持字体大小一致
-      const style = document.createElement('style');
-      style.id = 'print-style';
-      style.textContent = `
+
+      // 创建打印样式
+      const styleEl = document.createElement('style');
+      styleEl.id = 'embed-print-style';
+      styleEl.textContent = `
         @media print {
-          @page {
-            size: A4 portrait;
-            margin: 8mm;
-          }
-          
-          * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          
-          html, body {
-            width: 210mm;
-            height: 297mm;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-          }
-          
-          body * {
-            visibility: hidden;
-          }
-          
-          #print-area, #print-area * {
-            visibility: visible;
-          }
-          
-          #print-area {
-            position: fixed;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            page-break-inside: avoid;
-            page-break-after: avoid;
-          }
-          
-          .print-container {
-            width: 194mm !important;
-            max-width: 194mm !important;
-            height: auto !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            box-shadow: none !important;
-            background: white !important;
-            page-break-inside: avoid;
-            page-break-after: avoid;
-            position: relative;
-          }
-          
-          .print-container img {
-            width: 100% !important;
-            max-width: 100% !important;
-            height: auto !important;
-            display: block;
-            page-break-inside: avoid;
-          }
-          
-          .overlay-text {
-            position: absolute;
-            font-family: "SimSun", "Songti SC", serif;
-            font-weight: bold;
-          }
-          
-          /* 调整字体大小以匹配打印缩放比例 */
-          /* 原始容器宽度 420px，打印宽度 194mm ≈ 733px */
-          /* 缩放比例：733 / 420 ≈ 1.745 */
-          .overlay-text.name {
-            font-size: 22.7px !important; /* 13px * 1.745 */
-          }
-          
-          .overlay-text.phone {
-            font-size: 22.7px !important; /* 13px * 1.745 */
-          }
-          
-          .overlay-text.checkmark {
-            font-size: 24.4px !important; /* 14px * 1.745 */
-          }
-          
-          .overlay-text.diagnosis {
-            font-size: 20.9px !important; /* 12px * 1.745 */
-          }
-          
-          .overlay-text.drug {
-            font-size: 20.9px !important; /* 12px * 1.745 */
-          }
-          
-          .overlay-text.vision {
-            font-size: 19.2px !important; /* 11px * 1.745 */
-          }
-          
-          .overlay-text.doctor {
-            font-size: 22.7px !important; /* 13px * 1.745 */
-          }
-          
-          .overlay-text.time-1,
-          .overlay-text.time-2,
-          .overlay-text.time-3,
-          .overlay-text.time-4,
-          .overlay-text.time-5,
-          .overlay-text.time-6,
-          .overlay-text.time-7,
-          .overlay-text.time-8,
-          .overlay-text.time-9 {
-            font-size: 20.9px !important; /* 12px * 1.745 */
-          }
-          
-          /* 复诊电话样式（第3行右侧） */
-          .overlay-text.phone-row3 {
-            font-size: 22.7px !important;
-          }
+          @page { size: A4 portrait; margin: 8mm; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
+        html, body { width: 210mm; height: 297mm; margin: 0; padding: 0; overflow: hidden; }
+        body * { visibility: hidden; }
+        #print-area, #print-area * { visibility: visible; }
+        #print-area { position: fixed; left: 0; top: 0; width: 100%; height: 100%; margin: 0; padding: 0; display: flex; justify-content: center; align-items: flex-start; page-break-inside: avoid; page-break-after: avoid; }
+        .print-container { width: 194mm !important; max-width: 194mm !important; height: auto !important; margin: 0 !important; padding: 0 !important; box-shadow: none !important; background: white !important; page-break-inside: avoid; page-break-after: avoid; position: relative; }
+        .print-container img { width: 100% !important; max-width: 100% !important; height: auto !important; display: block; page-break-inside: avoid; }
+        .overlay-text { position: absolute; font-family: "SimSun", "宋体", "SC", serif; font-weight: bold; }
+        .overlay-text.name, .overlay-text.phone { font-size: 22.7px !important; /* 13px * 1.745 */ }
+        .overlay-text.checkmark { font-size: 24.4px !important; /* 14px * 1.745 */ }
+        .overlay-text.diagnosis { font-size: 20.9px !important; /* 12px * 1.745 */ }
+        .overlay-text.drug { font-size: 20.9px !important; /* 12px * 1.745 */ }
+        .overlay-text.vision { font-size: 19.2px !important; /* 11px * 1.745 */ }
+        .overlay-text.doctor { font-size: 22.7px !important; /* 13px * 1.745 */ }
+        .overlay-text.time-1, .overlay-text.time-2, .overlay-text.time-3, .overlay-text.time-4, .overlay-text.time-5, .overlay-text.time-6, .overlay-text.time-7, .overlay-text.time-8, .overlay-text.time-9 { font-size: 20.9px !important; /* 12px * 1.745 */ }
+        .overlay-text.phone-row3 { font-size: 22.7px !important; }
       `;
-      document.head.appendChild(style);
-      
-      // 执行打印
+      document.head.appendChild(styleEl);
+
       window.print();
-      
-      // 打印完成后移除样式
+
       setTimeout(() => {
-        const styleEl = document.getElementById('print-style');
-        if (styleEl) {
-          styleEl.remove();
-        }
+        const el = document.getElementById('embed-print-style');
+        if (el) el.remove();
       }, 1000);
     } catch (error) {
-      console.error('打印过程中发生错误:', error);
-      message.error('打印失败: ' + (error as Error).message);
+      console.error('打印失败', error);
+      message.error('打印失败：' + (error as Error).message);
     }
-  }
+  };
 
   return (
     <div>
       <Card
-        title="打印中心 - 玻注复诊注射卡"
+        title="打印中心 - 玻注预约单"
         extra={
           <Space>
             <Select
@@ -255,8 +174,8 @@ const PrintCenter: React.FC = () => {
               }
               onChange={(value) => setSelectedPatientId(value)}
               options={patients.map(p => ({
-                label: `${p.name}${p.phone ? ` (${p.phone})` : ''}`,
-                value: p.id
+                label: `${p.name} (${p.phone ? ` ${p.phone}` : ''})`,
+                value: p.id,
               }))}
               allowClear
             />
@@ -268,6 +187,7 @@ const PrintCenter: React.FC = () => {
             >
               打印
             </Button>
+            <Button icon={<ReloadOutlined />} onClick={fetchPatients} />
           </Space>
         }
       >
@@ -277,11 +197,11 @@ const PrintCenter: React.FC = () => {
               <Descriptions.Item label="姓名">{selectedPatient.name}</Descriptions.Item>
               <Descriptions.Item label="电话">{selectedPatient.phone || '-'}</Descriptions.Item>
               <Descriptions.Item label="诊断">{selectedPatient.diagnosis || '-'}</Descriptions.Item>
-              <Descriptions.Item label="药物">{selectedPatient.drug_type || '-'}</Descriptions.Item>
-              <Descriptions.Item label="治疗眼">
-                {selectedPatient.left_eye ? '左眼 ' : ''}{selectedPatient.right_eye ? '右眼' : ''}
+              <Descriptions.Item label="用药">{selectedPatient.drug_type || '-'}</Descriptions.Item>
+              <Descriptions.Item label="眼别">
+                {selectedPatient.left_eye ? '左眼' : ''}{selectedPatient.right_eye ? '右眼' : ''}
               </Descriptions.Item>
-              <Descriptions.Item label="预约数">{appointments.length} 次</Descriptions.Item>
+              <Descriptions.Item label="预约数量">{appointments.length}</Descriptions.Item>
             </Descriptions>
 
             {/* Print Preview Area */}
@@ -293,7 +213,7 @@ const PrintCenter: React.FC = () => {
                 background: '#f0f0f0',
                 padding: 20,
                 borderRadius: 8,
-                minHeight: 600
+                minHeight: 600,
               }}
             >
               <div
@@ -304,17 +224,13 @@ const PrintCenter: React.FC = () => {
                   maxWidth: '420px',
                   background: '#fff',
                   boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                  overflow: 'hidden'
+                  overflow: 'hidden',
                 }}
               >
-                <img 
-                  src="/print-template.png" 
-                  alt="打印模板" 
-                  style={{ 
-                    width: '100%',
-                    display: 'block',
-                    height: 'auto'
-                  }}
+                <img
+                  src="/print-template.png"
+                  alt="打印模板"
+                  style={{ width: '100%', display: 'block', height: 'auto' }}
                   onError={(e) => {
                     console.error('打印模板图片加载失败');
                     e.currentTarget.style.display = 'none';
@@ -322,83 +238,85 @@ const PrintCenter: React.FC = () => {
                     if (parent) {
                       const errorDiv = document.createElement('div');
                       errorDiv.style.cssText = 'padding: 40px; text-align: center; color: #999;';
-                      errorDiv.innerHTML = '⚠️ 打印模板图片加载失败<br/>请检查 print-template.png 文件是否存在';
+                      errorDiv.innerHTML = '打印模板图片加载失败<br/>请确认 print-template.png 存在于前端目录';
                       parent.appendChild(errorDiv);
                     }
                   }}
                 />
 
-                {/* Patient Info Overlay - Row 1: 姓名、联系方式、左眼右眼 */}
-                <span className="overlay-text name" style={{ position: 'absolute', top: '19.7%', left: '16%', fontSize: '13px', fontWeight: 'bold' }}>
+                {/* Patient Info Overlay - Row 1: 姓名、电话、左眼✓、右眼✓ */}
+                <span className="overlay-text name" style={{ position: 'absolute', top: '19.3%', left: '16%', fontSize: '13px', fontWeight: 'bold' }}>
                   {selectedPatient.name}
                 </span>
-                <span className="overlay-text phone" style={{ position: 'absolute', top: '19.2%', left: '53%', fontSize: '13px', fontWeight: 'bold' }}>
+                <span className="overlay-text phone" style={{ position: 'absolute', top: '19%', left: '52%', fontSize: '13px', fontWeight: 'bold' }}>
                   {selectedPatient.phone || ''}
                 </span>
                 {selectedPatient.left_eye && (
-                  <span className="overlay-text checkmark" style={{ position: 'absolute', top: '19.3%', left: '72.5%', fontSize: '11px', fontWeight: 'bold' }}>
+                  <span className="overlay-text checkmark" style={{ position: 'absolute', top: '19%', left: '73%', fontSize: '14px', fontWeight: 'bold' }}>
                     ✓
                   </span>
                 )}
                 {selectedPatient.right_eye && (
-                  <span className="overlay-text checkmark" style={{ position: 'absolute', top: '19.3%', left: '85.5%', fontSize: '11px', fontWeight: 'bold' }}>
+                  <span className="overlay-text checkmark" style={{ position: 'absolute', top: '19%', left: '86%', fontSize: '14px', fontWeight: 'bold' }}>
                     ✓
                   </span>
                 )}
 
-                {/* Patient Info Overlay - Row 2: 诊断、治疗药物、视力 */}
-                <span className="overlay-text diagnosis" style={{ position: 'absolute', top: '22.9%', left: '16%', fontSize: '12px', fontWeight: 'bold' }}>
+                {/* Patient Info Overlay - Row 2: 诊断、用药、视力 */}
+                <span className="overlay-text diagnosis" style={{ position: 'absolute', top: '23.3%', left: '16%', fontSize: '12px', fontWeight: 'bold' }}>
                   {selectedPatient.diagnosis || ''}
                 </span>
-                <span className="overlay-text drug" style={{ position: 'absolute', top: '22.9%', left: '51%', fontSize: '12px', fontWeight: 'bold' }}>
+                <span className="overlay-text drug" style={{ position: 'absolute', top: '23.6%', left: '51%', fontSize: '12px', fontWeight: 'bold' }}>
                   {(() => {
-                    // 取最新预约（injection_count 最大）的 drug_name，为空则依次往前找，最后回退到患者表
                     const sorted = [...appointments].sort((a, b) => (b.injection_count || 0) - (a.injection_count || 0));
                     const found = sorted.find(a => a.drug_name);
                     return found?.drug_name || selectedPatient.drug_type || '';
                   })()}
                 </span>
-                <span className="overlay-text vision" style={{ position: 'absolute', top: '23.5%', left: '79%', fontSize: '11px', fontWeight: 'bold' }}>
+                <span className="overlay-text vision" style={{ position: 'absolute', top: '23.7%', left: '79%', fontSize: '11px', fontWeight: 'bold' }}>
                   {selectedPatient.left_vision || selectedPatient.right_vision
-                    ? `左${selectedPatient.left_vision || '-'} 右${selectedPatient.right_vision || '-'}`
+                    ? `${selectedPatient.left_vision || '-'}/${selectedPatient.right_vision || '-'}`
                     : ''}
                 </span>
 
-                {/* Patient Info Overlay - Row 3: 医生（左）、本院复诊提醒电话（右） */}
-                <span className="overlay-text doctor" style={{ position: 'absolute', top: '27.2%', left: '16%', fontSize: '13px', fontWeight: 'bold' }}>
+                {/* Patient Info Overlay - Row 3: 医生、复诊电话 */}
+                <span className="overlay-text doctor" style={{ position: 'absolute', top: '26.5%', left: '16%', fontSize: '13px', fontWeight: 'bold' }}>
                   {(() => {
                     const sorted = [...appointments].sort((a, b) => (b.injection_count || 0) - (a.injection_count || 0));
                     return sorted.find(a => a.doctor)?.doctor || '';
                   })()}
                 </span>
-                <span className="overlay-text doctor" style={{ position: 'absolute', top: '26.5%', left: '62%', fontSize: '13px', fontWeight: 'bold' }}>
+                <span className="overlay-text phone-row3" style={{ position: 'absolute', top: '26.5%', left: '63%', fontSize: '13px', fontWeight: 'bold' }}>
                   {printPhoneNumber}
                 </span>
 
-                {/* Initial Phase - 第1-4次治疗时间 */}
-                <span className="overlay-text time-1" style={{ position: 'absolute', top: '39.9%', left: '28%', fontSize: '12px', fontWeight: 'bold' }}>
-                  {formatDate(getAppointmentByCount(1)?.appointment_date)}
+                {/* 第1-4次：横向，治疗时间行 */}
+                <span className="overlay-text time-1" style={{ position: 'absolute', top: '40.5%', left: '28%', fontSize: '12px', fontWeight: 'bold' }}>
+                  {formatDate(getAppointmentByCount(appointments, 1)?.appointment_date)}
                 </span>
-                <span className="overlay-text time-2" style={{ position: 'absolute', top: '39.9%', left: '46%', fontSize: '12px', fontWeight: 'bold' }}>
-                  {formatDate(getAppointmentByCount(2)?.appointment_date)}
+                <span className="overlay-text time-2" style={{ position: 'absolute', top: '40.5%', left: '46%', fontSize: '12px', fontWeight: 'bold' }}>
+                  {formatDate(getAppointmentByCount(appointments, 2)?.appointment_date)}
                 </span>
-                <span className="overlay-text time-3" style={{ position: 'absolute', top: '39.9%', left: '64%', fontSize: '12px', fontWeight: 'bold' }}>
-                  {formatDate(getAppointmentByCount(3)?.appointment_date)}
+                <span className="overlay-text time-3" style={{ position: 'absolute', top: '40.5%', left: '64%', fontSize: '12px', fontWeight: 'bold' }}>
+                  {formatDate(getAppointmentByCount(appointments, 3)?.appointment_date)}
                 </span>
-                <span className="overlay-text time-4" style={{ position: 'absolute', top: '39.9%', left: '82%', fontSize: '12px', fontWeight: 'bold' }}>
-                  {formatDate(getAppointmentByCount(4)?.appointment_date)}
+                <span className="overlay-text time-4" style={{ position: 'absolute', top: '40.5%', left: '82%', fontSize: '12px', fontWeight: 'bold' }}>
+                  {formatDate(getAppointmentByCount(appointments, 4)?.appointment_date)}
                 </span>
 
-                {/* Maintenance Phase - 第5-9次，根据状况决定放左列(稳定)还是右列(不稳定) */}
+                {/* 第5-9次：根据 condition_status 分左右列
+                    稳定 → 左侧"治疗时间"列 left: 39%
+                    不稳定/趋差 → 右侧"治疗时间"列 left: 83%
+                */}
                 {[5, 6, 7, 8, 9].map((n, idx) => {
-                  const appt = getAppointmentByCount(n);
-                  if (!appt?.appointment_date) return null;
-                  const isUnstable = appt.condition_status === '不稳定';
-                  const topPct = 59.5 + idx * 3.5;
-                  const leftPct = isUnstable ? '83%' : '39%';
+                  const app = getAppointmentByCount(appointments, n);
+                  if (!app?.appointment_date) return null;
+                  const isUnstable = app.condition_status === '趋差' || app.condition_status === '不稳定';
+                  const topPct = 60.3 + idx * 3.5;
+                  const leftPct = isUnstable ? 83 : 39;
                   return (
-                    <span key={n} className={`overlay-text time-${n}`} style={{ position: 'absolute', top: `${topPct}%`, left: leftPct, fontSize: '12px', fontWeight: 'bold' }}>
-                      {formatDate(appt.appointment_date)}
+                    <span key={n} className={`overlay-text time-${n}`} style={{ position: 'absolute', top: `${topPct}%`, left: `${leftPct}%`, fontSize: '12px', fontWeight: 'bold' }}>
+                      {formatDate(app.appointment_date)}
                     </span>
                   );
                 })}
@@ -406,7 +324,7 @@ const PrintCenter: React.FC = () => {
             </div>
           </>
         ) : (
-          <Empty description="请先选择患者以预览打印内容" />
+          <Empty description="请选择患者以预览打印内容" />
         )}
       </Card>
     </div>

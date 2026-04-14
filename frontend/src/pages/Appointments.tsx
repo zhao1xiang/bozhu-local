@@ -4,9 +4,10 @@ import { Table, Badge, Modal, Form, Select, DatePicker, Input, message, Button, 
 import type { ColumnsType } from 'antd/es/table';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import { PlusOutlined, PrinterOutlined, CloseOutlined } from '@ant-design/icons';
+import { PlusOutlined, PrinterOutlined, CloseOutlined, DownloadOutlined } from '@ant-design/icons';
 import { Appointment, Patient, DataDictionaryItem } from '@/types';
 import { apiClient } from '@/api/client';
+import ExcelJS from 'exceljs';
 
 const Appointments: React.FC = () => {
   const navigate = useNavigate();
@@ -607,6 +608,7 @@ const Appointments: React.FC = () => {
       attending_doctor: values.attending_doctor,
       left_eye_pressure: values.left_eye_pressure,
       right_eye_pressure: values.right_eye_pressure,
+      notes: values.notes,
     };
 
     if (editingId) {
@@ -660,6 +662,82 @@ const Appointments: React.FC = () => {
     fetchAppointments(searchValues);
 
     return values.patient_id;
+  };
+
+  const handleExportAppointments = async () => {
+    const data = appointments;
+    if (!data.length) { message.warning('暂无数据可导出'); return; }
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('预约列表');
+
+    const headers = [
+      '患者姓名', '门诊号', '玻注日期', '时间段', '眼别', '药品',
+      '针次', '治疗阶段', '状况', '费别', '注药医生', '管床医生',
+      '裸眼视力(右)', '裸眼视力(左)', '矫正视力(右)', '矫正视力(左)',
+      '右眼压', '左眼压', '血压', '血糖', '冲眼结果', '病毒报告',
+      '复诊日期', '状态', '备注'
+    ];
+
+    const headerStyle = {
+      font: { bold: true, size: 11, name: 'Microsoft YaHei' },
+      alignment: { horizontal: 'center' as const, vertical: 'middle' as const },
+      fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFE8F4FC' } },
+      border: { top: { style: 'thin' as const }, left: { style: 'thin' as const }, bottom: { style: 'thin' as const }, right: { style: 'thin' as const } }
+    };
+    const dataStyle = {
+      font: { size: 10, name: 'Microsoft YaHei' },
+      alignment: { vertical: 'middle' as const },
+      border: { top: { style: 'thin' as const }, left: { style: 'thin' as const }, bottom: { style: 'thin' as const }, right: { style: 'thin' as const } }
+    };
+
+    const headerRow = ws.addRow(headers);
+    headerRow.height = 24;
+    headerRow.eachCell(cell => { cell.style = headerStyle; });
+    headers.forEach((_, i) => { ws.getColumn(i + 1).width = 14; });
+
+    const statusMap: Record<string, string> = { scheduled: '已预约', confirmed: '已确认', completed: '已完成', cancelled: '已取消' };
+
+    for (const a of data) {
+      const patient = patients.find(p => p.id === a.patient_id);
+      ws.addRow([
+        patient?.name ?? '',
+        patient?.outpatient_number ?? '',
+        a.appointment_date ? dayjs(a.appointment_date).format('YYYY-MM-DD') : '',
+        a.time_slot ?? '',
+        a.eye ?? '',
+        a.drug_name ?? '',
+        a.injection_count ?? '',
+        a.treatment_phase ?? '',
+        a.condition_status ?? '',
+        a.cost_type ?? '',
+        a.doctor ?? '',
+        a.attending_doctor ?? '',
+        a.pre_op_vision_right ?? '',
+        a.pre_op_vision_left ?? '',
+        a.pre_op_vision_right_corrected ?? '',
+        a.pre_op_vision_left_corrected ?? '',
+        a.right_eye_pressure ?? '',
+        a.left_eye_pressure ?? '',
+        a.blood_pressure ?? '',
+        a.blood_sugar ?? '',
+        a.eye_wash_result ?? '',
+        a.virus_report ?? '',
+        a.follow_up_date ? dayjs(a.follow_up_date).format('YYYY-MM-DD') : '',
+        statusMap[a.status] ?? a.status,
+        a.notes ?? '',
+      ]).eachCell(cell => { cell.style = dataStyle; });
+    }
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `预约导出_${dayjs().format('YYYY-MM-DD_HHmm')}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(url);
+    message.success('导出成功');
   };
 
   const handleOk = async () => {
@@ -763,9 +841,10 @@ const Appointments: React.FC = () => {
       render: (text) => text || '上午',
     },
     {
-      title: '注药号',
-      dataIndex: 'injection_number',
-      key: 'injection_number',
+      title: '复诊日期',
+      dataIndex: 'follow_up_date',
+      key: 'follow_up_date',
+      render: (text) => text ? dayjs(text).format('YYYY-MM-DD') : '-',
     },
 
     {
@@ -878,9 +957,6 @@ const Appointments: React.FC = () => {
           <Form.Item name="doctor" label="医生">
             <Select placeholder="选择医生" style={{ width: 120 }} allowClear options={doctors} />
           </Form.Item>
-          <Form.Item name="injection_number" label="注药号">
-            <Input placeholder="注药号" style={{ width: 120 }} />
-          </Form.Item>
           <Form.Item>
             <Space>
               <Button type="primary" onClick={handleSearch}>搜索</Button>
@@ -893,9 +969,14 @@ const Appointments: React.FC = () => {
       <Card
         title="预约管理"
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => handleAdd()}>
-            新建预约
-          </Button>
+          <Space>
+            <Button icon={<DownloadOutlined />} onClick={handleExportAppointments}>
+              导出
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => handleAdd()}>
+              新建预约
+            </Button>
+          </Space>
         }
       >
         <Table

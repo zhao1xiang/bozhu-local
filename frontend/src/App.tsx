@@ -10,6 +10,8 @@ import Login from './pages/Login';
 import Splash from './pages/Splash';
 import DebugInfo from './pages/DebugInfo';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
+import EmbedAppointment from './pages/EmbedAppointment';
+import EmbedAppointmentPlain from './pages/EmbedAppointmentPlain';
 
 const PrivateRoute = () => {
   const { isAuthenticated } = useAuth();
@@ -81,6 +83,10 @@ function App() {
           
           {/* 调试信息页面 */}
           <Route path="/debug" element={<DebugInfo />} />
+
+          {/* iframe 嵌入预约页面（无需登录） */}
+          <Route path="/embed/appointment" element={<EmbedAppointment />} />
+          <Route path="/embed/appointment-plain" element={<EmbedAppointmentPlain />} />
 
           {/* 受保护的路由 */}
           <Route element={<PrivateRoute />}>

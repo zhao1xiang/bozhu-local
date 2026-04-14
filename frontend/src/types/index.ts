@@ -70,8 +70,10 @@ export interface Appointment {
   created_at: string;
   updated_at: string;
   patient?: Patient;
-  pre_op_vision_left?: number;
-  pre_op_vision_right?: number;
+  pre_op_vision_left?: string;
+  pre_op_vision_right?: string;
+  pre_op_vision_left_corrected?: string;
+  pre_op_vision_right_corrected?: string;
   pre_op_cst_left?: number;
   pre_op_cst_right?: number;
   treatment_phase?: string;

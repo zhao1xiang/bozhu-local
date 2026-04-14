@@ -9,6 +9,7 @@ class AppointmentBase(SQLModel):
     time_slot: Optional[str] = None
     status: str = Field(default="scheduled", index=True)
     notes: Optional[str] = None
+    source: Optional[str] = Field(default=None, description="来源：embed_direct/embed_print")
     is_deleted: bool = Field(default=False, index=True, description="软删除标记")
     
     # New fields
