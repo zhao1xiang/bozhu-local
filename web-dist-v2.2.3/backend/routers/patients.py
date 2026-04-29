@@ -1,14 +1,56 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session, select
 from database import engine
 from models import Patient, PatientBase
-from typing import List
+from models.data_dictionary import DataDictionary
+from models.user import User
+from typing import List, Optional
+from jose import jwt
+from security import SECRET_KEY, ALGORITHM
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
 def get_session():
     with Session(engine) as session:
         yield session
+
+
+def get_optional_user(request: Request, session: Session = Depends(get_session)) -> Optional[User]:
+    """获取当前用户，无 token 时返回 None 而不报错"""
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    token = auth[7:]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        username = payload.get("sub")
+        if not username:
+            return None
+        return session.exec(select(User).where(User.username == username)).first()
+    except Exception:
+        return None
+
+
+def get_ward_doctor_values(wards: str, session: Session) -> Optional[List[str]]:
+    """根据病区列表获取对应的医生 value 列表
+    返回 None 表示不过滤（admin），返回列表（可能为空）表示按病区过滤
+    """
+    if not wards:
+        return None
+    ward_list = [w.strip() for w in wards.split(',') if w.strip()]
+    if not ward_list:
+        return None
+    try:
+        doctors = session.exec(
+            select(DataDictionary).where(
+                DataDictionary.category == 'doctor',
+                DataDictionary.is_active == True,
+            )
+        ).all()
+        # 返回属于该病区的医生列表（可能为空，表示该病区没有配置医生）
+        return [d.value for d in doctors if getattr(d, 'ward', None) and any(w in str(d.ward).split(',') for w in ward_list)]
+    except Exception:
+        return []
 
 @router.post("/", response_model=Patient)
 def create_patient(patient: PatientBase, session: Session = Depends(get_session)):
@@ -42,20 +84,49 @@ def create_patient(patient: PatientBase, session: Session = Depends(get_session)
     return db_patient
 
 @router.get("/", response_model=List[Patient])
-def read_patients(skip: int = 0, limit: int = 99999, outpatient_number: str = None, session: Session = Depends(get_session)):
+def read_patients(
+    skip: int = 0, limit: int = 99999,
+    outpatient_number: str = None,
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
     try:
+        from models import Appointment
         q = select(Patient).where(Patient.is_deleted == False)
         if outpatient_number:
             q = q.where(Patient.outpatient_number == outpatient_number)
+
+        # 病区过滤：ward 账号只能看自己病区医生的患者
+        role = getattr(current_user, 'role', 'admin')
+        wards = getattr(current_user, 'wards', None)
+        if role != 'admin' and wards:
+            doctor_values = get_ward_doctor_values(wards, session)
+            if doctor_values is not None:
+                # 找出有注药医生的患者（取最新预约的医生）
+                # 策略：患者的最新预约的 doctor 在病区医生列表里，或者患者没有任何预约（无病区，所有人可见）
+                all_patients = session.exec(q.order_by(Patient.created_at.desc()).offset(skip).limit(limit)).all()
+                filtered = []
+                for p in all_patients:
+                    latest_appt = session.exec(
+                        select(Appointment).where(
+                            Appointment.patient_id == p.id,
+                            Appointment.is_deleted == False,
+                            Appointment.doctor != None,
+                        ).order_by(Appointment.created_at.desc())
+                    ).first()
+                    if latest_appt is None:
+                        # 没有注药医生，所有病区可见
+                        filtered.append(p)
+                    elif latest_appt.doctor in doctor_values:
+                        filtered.append(p)
+                return filtered
+
         patients = session.exec(q.order_by(Patient.created_at.desc()).offset(skip).limit(limit)).all()
         return patients
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching patients: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error fetching patients: {str(e)}")
 
 @router.get("/{patient_id}", response_model=Patient)
 def read_patient(patient_id: str, session: Session = Depends(get_session)):

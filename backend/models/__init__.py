@@ -5,3 +5,4 @@ from .user import User
 from .system_setting import SystemSetting, SystemSettingBase, SystemSettingCreate, SystemSettingUpdate
 from .follow_up_record import FollowUpRecord, FollowUpRecordBase, FollowUpRecordCreate
 from .data_dictionary import DataDictionary, DataDictionaryBase
+from .embed_log import EmbedLog

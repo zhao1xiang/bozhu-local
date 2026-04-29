@@ -4,80 +4,96 @@ import { message } from 'antd';
 
 interface AuthContextType {
     token: string | null;
-    login: (token: string, remember?: boolean) => void;
+    role: string;
+    wards: string;
+    username: string;
+    login: (token: string, role?: string, wards?: string, username?: string, remember?: boolean) => void;
     logout: () => void;
     isAuthenticated: boolean;
+    isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [token, setToken] = useState<string | null>(() => {
-        // 优先从 localStorage 获取，如果没有则从 sessionStorage 获取
-        return localStorage.getItem('token') || sessionStorage.getItem('token');
-    });
+    const [token, setToken] = useState<string | null>(() =>
+        localStorage.getItem('token') || sessionStorage.getItem('token')
+    );
+    const [role, setRole] = useState<string>(() =>
+        localStorage.getItem('role') || sessionStorage.getItem('role') || 'admin'
+    );
+    const [wards, setWards] = useState<string>(() =>
+        localStorage.getItem('wards') || sessionStorage.getItem('wards') || ''
+    );
+    const [username, setUsername] = useState<string>(() =>
+        localStorage.getItem('username') || sessionStorage.getItem('username') || ''
+    );
 
     useEffect(() => {
         if (token) {
-            // 检查 token 是否存储在 localStorage 中（记住登录状态）
             const isRemembered = localStorage.getItem('token') === token;
-            
-            if (isRemembered) {
-                localStorage.setItem('token', token);
-            } else {
-                sessionStorage.setItem('token', token);
-            }
-            
-            // Configure axios interceptor
+            const storage = isRemembered ? localStorage : sessionStorage;
+            storage.setItem('token', token);
+            storage.setItem('role', role);
+            storage.setItem('wards', wards);
+            storage.setItem('username', username);
+
             const interceptor = apiClient.interceptors.request.use(config => {
                 config.headers.Authorization = `Bearer ${token}`;
                 return config;
             });
-
-            // Response interceptor to handle 401
             const resInterceptor = apiClient.interceptors.response.use(
                 response => response,
                 error => {
-                    if (error.response && error.response.status === 401) {
-                        logout();
-                    }
+                    if (error.response && error.response.status === 401) logout();
                     return Promise.reject(error);
                 }
             );
-
             return () => {
                 apiClient.interceptors.request.eject(interceptor);
                 apiClient.interceptors.response.eject(resInterceptor);
             };
         } else {
-            localStorage.removeItem('token');
-            sessionStorage.removeItem('token');
+            ['token', 'role', 'wards', 'username'].forEach(k => {
+                localStorage.removeItem(k);
+                sessionStorage.removeItem(k);
+            });
         }
     }, [token]);
 
-    const login = (newToken: string, remember: boolean = true) => {
+    const login = (newToken: string, newRole = 'admin', newWards = '', newUsername = '', remember = true) => {
         setToken(newToken);
-        
-        if (remember) {
-            // 记住登录状态，存储到 localStorage
-            localStorage.setItem('token', newToken);
-            sessionStorage.removeItem('token');
-        } else {
-            // 不记住登录状态，存储到 sessionStorage
-            sessionStorage.setItem('token', newToken);
-            localStorage.removeItem('token');
-        }
+        setRole(newRole);
+        setWards(newWards);
+        setUsername(newUsername);
+        const storage = remember ? localStorage : sessionStorage;
+        const other = remember ? sessionStorage : localStorage;
+        storage.setItem('token', newToken);
+        storage.setItem('role', newRole);
+        storage.setItem('wards', newWards);
+        storage.setItem('username', newUsername);
+        ['token', 'role', 'wards', 'username'].forEach(k => other.removeItem(k));
     };
 
     const logout = () => {
         setToken(null);
-        localStorage.removeItem('token');
-        sessionStorage.removeItem('token');
+        setRole('admin');
+        setWards('');
+        setUsername('');
+        ['token', 'role', 'wards', 'username'].forEach(k => {
+            localStorage.removeItem(k);
+            sessionStorage.removeItem(k);
+        });
         message.info('已退出登录');
     };
 
     return (
-        <AuthContext.Provider value={{ token, login, logout, isAuthenticated: !!token }}>
+        <AuthContext.Provider value={{
+            token, role, wards, username,
+            login, logout,
+            isAuthenticated: !!token,
+            isAdmin: role === 'admin',
+        }}>
             {children}
         </AuthContext.Provider>
     );
@@ -85,8 +101,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useAuth = () => {
     const context = useContext(AuthContext);
-    if (!context) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
+    if (!context) throw new Error('useAuth must be used within an AuthProvider');
     return context;
 };

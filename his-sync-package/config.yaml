@@ -1,0 +1,17 @@
+active_hospital: hospital5
+hospitals:
+  hospital5:
+    adapter: hospital5_adapter
+    his:
+      type: cache
+      host: 10.60.0.40
+      port: 1972
+      namespace: dhc-app
+      user: ext_user
+      password: "Ext1108#2026@Zhuyao#"
+      procedure: web_WFYKYYJTT_Interface.view_zy_message
+    name: 潍坊眼科医院
+sqlite:
+  path: ../backend/database.db
+sync:
+  interval: 300

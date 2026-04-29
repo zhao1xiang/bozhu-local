@@ -14,6 +14,7 @@ from database import engine
 from models import Patient, Appointment, AppointmentBase
 from models.patient import PatientBase
 from models.system_setting import SystemSetting
+from models.embed_log import EmbedLog
 from typing import List, Optional
 from datetime import date
 import uuid
@@ -34,7 +35,7 @@ def get_secret_key(session: Session) -> str:
     setting = session.exec(
         select(SystemSetting).where(SystemSetting.key == "embed_secret_key")
     ).first()
-    return setting.value if setting else "bozhu_secret_2024"
+    return setting.value if setting else "f9A7xK2mQ8vZrP4sT1uWc6YhN3bD5eL0"
 
 
 def verify_sign(data: str, sign: str, secret_key: str) -> bool:
@@ -84,9 +85,30 @@ def verify_plain(
     eye: str = "",
     injection_count: int = 0,
     doctor: str = "",
+    request: Request = None,
     session: Session = Depends(get_session),
 ):
     """明文参数接口，不需要签名验证"""
+    # 记录调用日志
+    import json as _json
+    params_dict = {
+        "name": name, "outpatient_number": outpatient_number, "phone": phone,
+        "diagnosis": diagnosis, "drug_name": drug_name, "eye": eye,
+        "injection_count": injection_count, "doctor": doctor,
+    }
+    client_ip = request.client.host if request else None
+    full_url = str(request.url) if request else None
+    log = EmbedLog(
+        call_type="verify-plain",
+        url=full_url,
+        params=_json.dumps(params_dict, ensure_ascii=False),
+        outpatient_number=outpatient_number or None,
+        patient_name=name or None,
+        client_ip=client_ip,
+        success=True,
+    )
+    session.add(log)
+    session.commit()
     payload = {
         "name": name,
         "outpatient_number": outpatient_number,
@@ -125,11 +147,15 @@ def verify_plain(
 def verify_and_get_data(
     data: str,
     sign: str,
+    request: Request,
     session: Session = Depends(get_session),
 ):
     """
     验证签名，返回患者信息和已有预约记录
     """
+    import json as _json
+    client_ip = request.client.host if request else None
+    full_url = str(request.url) if request else None
     secret_key = get_secret_key(session)
 
     # URL 解码后 + 会变成空格，需要还原
@@ -137,6 +163,9 @@ def verify_and_get_data(
 
     # 1. 验证签名
     if not verify_sign(data, sign, secret_key):
+        log = EmbedLog(call_type="verify", url=full_url, params=data,
+                       client_ip=client_ip, success=False, error_msg="签名验证失败")
+        session.add(log); session.commit()
         raise HTTPException(status_code=403, detail="签名验证失败")
 
     # 2. 解码数据
@@ -145,7 +174,23 @@ def verify_and_get_data(
     # 3. 验证时间戳
     ts = payload.get("timestamp", 0)
     if abs(time.time() - int(ts)) > TIMESTAMP_EXPIRE_SECONDS:
+        log = EmbedLog(call_type="verify", url=full_url, params=_json.dumps(payload, ensure_ascii=False),
+                       client_ip=client_ip, success=False, error_msg="请求已过期")
+        session.add(log); session.commit()
         raise HTTPException(status_code=400, detail="请求已过期")
+
+    # 记录成功日志
+    log = EmbedLog(
+        call_type="verify",
+        url=full_url,
+        params=_json.dumps(payload, ensure_ascii=False),
+        outpatient_number=payload.get("outpatient_number") or None,
+        patient_name=payload.get("name") or None,
+        client_ip=client_ip,
+        success=True,
+    )
+    session.add(log)
+    session.commit()
 
     outpatient_number = payload.get("outpatient_number")
     eye = payload.get("eye")  # 左眼/右眼/双眼
@@ -208,32 +253,61 @@ def save_patient_and_appointments(
     if patient_id:
         # 更新患者
         eye = patient_data.get("eye", "")
-        conn.execute(sa_text("""
-            UPDATE patient SET name=:name, diagnosis=:diagnosis, drug_type=:drug_type,
-                left_eye=:left_eye, right_eye=:right_eye, patient_type=:patient_type,
-                updated_at=:updated_at
-            WHERE id=:id
-        """), {
+        phone_new = patient_data.get("phone", "") or ""
+        # 过滤"无"值
+        if phone_new in ("无", "null", "undefined"):
+            phone_new = ""
+
+        update_params = {
             "name": patient_data.get("name", ""),
-            "diagnosis": patient_data.get("diagnosis", ""),
-            "drug_type": patient_data.get("drug_name", ""),
+            "diagnosis": patient_data.get("diagnosis") or "",
+            "drug_type": patient_data.get("drug_name") or "",
             "left_eye": 1 if eye in ["左眼", "双眼"] else 0,
             "right_eye": 1 if eye in ["右眼", "双眼"] else 0,
-            "patient_type": patient_data.get("patient_type", ""),
+            "patient_type": patient_data.get("patient_type") or "",
             "updated_at": now_str,
             "id": patient_id,
-        })
+        }
+
+        if phone_new:
+            # 检查新 phone 是否被其他患者占用
+            existing = conn.execute(sa_text(
+                "SELECT id FROM patient WHERE phone=:p AND is_deleted=0 AND id!=:id"
+            ), {"p": phone_new, "id": patient_id}).first()
+            if not existing:
+                update_params["phone"] = phone_new
+                conn.execute(sa_text("""
+                    UPDATE patient SET name=:name, diagnosis=:diagnosis, drug_type=:drug_type,
+                        left_eye=:left_eye, right_eye=:right_eye, patient_type=:patient_type,
+                        phone=:phone, updated_at=:updated_at
+                    WHERE id=:id
+                """), update_params)
+            else:
+                del update_params["phone"]
+                conn.execute(sa_text("""
+                    UPDATE patient SET name=:name, diagnosis=:diagnosis, drug_type=:drug_type,
+                        left_eye=:left_eye, right_eye=:right_eye, patient_type=:patient_type,
+                        updated_at=:updated_at
+                    WHERE id=:id
+                """), update_params)
+        else:
+            conn.execute(sa_text("""
+                UPDATE patient SET name=:name, diagnosis=:diagnosis, drug_type=:drug_type,
+                    left_eye=:left_eye, right_eye=:right_eye, patient_type=:patient_type,
+                    updated_at=:updated_at
+                WHERE id=:id
+            """), update_params)
     else:
         # 新建患者
         phone = patient_data.get("phone") or ""
+        if phone in ("无", "null", "undefined"):
+            phone = ""
         if phone:
             row = conn.execute(sa_text(
                 "SELECT id FROM patient WHERE phone=:p AND is_deleted=0"
             ), {"p": phone}).first()
             if row:
-                phone = outpatient_number or str(uuid.uuid4())[:11]
-        else:
-            phone = outpatient_number or str(uuid.uuid4())[:11]
+                phone = ""  # 已被占用，存 NULL
 
         patient_id = str(uuid.uuid4())
         eye = patient_data.get("eye", "")
@@ -249,7 +323,7 @@ def save_patient_and_appointments(
             "id": patient_id,
             "name": patient_data.get("name", ""),
             "outpatient_number": outpatient_number,
-            "phone": phone,
+            "phone": phone if phone else None,
             "diagnosis": patient_data.get("diagnosis"),
             "drug_type": patient_data.get("drug_name"),
             "left_eye": 1 if eye in ["左眼", "双眼"] else 0,

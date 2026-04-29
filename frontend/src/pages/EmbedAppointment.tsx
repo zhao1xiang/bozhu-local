@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Select, DatePicker, InputNumber, Button,
   Row, Col, message, Spin, Alert, Tabs,
@@ -63,6 +63,7 @@ const getNextAppointmentDate = (base: Dayjs, injectionCount: number, intervalDay
 
 const EmbedAppointment: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [printSaving, setPrintSaving] = useState(false);
@@ -70,6 +71,8 @@ const EmbedAppointment: React.FC = () => {
   const [patientData, setPatientData] = useState<PatientData | null>(null);
   const [activeTab, setActiveTab] = useState<string>('bozhu');
   const [savedOk, setSavedOk] = useState(false);
+  const [printPhoneNumber, setPrintPhoneNumber] = useState<string>('');
+  const [successPage, setSuccessPage] = useState<'save' | 'print' | null>(null);
 
   const [bozhuAppts, setBozhuAppts] = useState<AppItem[]>([
     { injection_count: 1 },
@@ -81,6 +84,8 @@ const EmbedAppointment: React.FC = () => {
 
   const [injectionWeekdays, setInjectionWeekdays] = useState<string[]>(['1']);
   const [injectionIntervalFirst4, setInjectionIntervalFirst4] = useState<number>(30);
+  const [diagnoses, setDiagnoses] = useState<{label:string;value:string}[]>([]);
+  const [drugs, setDrugs] = useState<{label:string;value:string}[]>([]);
 
   useEffect(() => {
     const dataParam = searchParams.get('data');
@@ -107,18 +112,32 @@ const EmbedAppointment: React.FC = () => {
       setInjectionWeekdays(wd);
       setInjectionIntervalFirst4(interval);
 
+      // 获取复诊提醒电话
+      apiClient.get('/system-settings/print_phone_number').then(r => setPrintPhoneNumber(r.data?.value || '')).catch(() => {});
+
+      // 获取诊断和药物数据字典
+      apiClient.get('/data-dictionary', { params: { category: 'diagnosis' } }).then(r => {
+        setDiagnoses((r.data || []).filter((d: any) => d.is_active).map((d: any) => ({ label: d.label, value: d.value })));
+      }).catch(() => {});
+      apiClient.get('/data-dictionary', { params: { category: 'drug' } }).then(r => {
+        setDrugs((r.data || []).filter((d: any) => d.is_active).map((d: any) => ({ label: d.label, value: d.value })));
+      }).catch(() => {});
+
       const { patient, appointments, payload } = verifyRes.data;
+
+      const cleanVal = (v: any) => (!v || v === '无' || v === 'null' || v === 'undefined') ? '' : String(v).trim();
+      const eyeRaw = cleanVal(payload?.eye);
 
       const pd: PatientData = {
         id: patient?.id,
-        name: payload?.name,
+        name: cleanVal(payload?.name) || payload?.name,
         outpatient_number: payload?.outpatient_number,
-        phone: payload?.phone,
-        diagnosis: payload?.diagnosis,
-        drug_name: payload?.drug_name,
-        eye: payload?.eye,
-        injection_count: payload?.injection_count,
-        doctor: payload?.doctor,
+        phone: cleanVal(payload?.phone) || undefined,
+        diagnosis: cleanVal(payload?.diagnosis) || undefined,
+        drug_name: cleanVal(payload?.drug_name) || undefined,
+        eye: eyeRaw === '' ? '双眼' : eyeRaw,
+        injection_count: typeof payload?.injection_count === 'number' ? payload.injection_count : (parseInt(payload?.injection_count) || 0),
+        doctor: cleanVal(payload?.doctor) || undefined,
         patient_type: (payload?.injection_count >= 1) ? '经治' : '初治',
       };
       setPatientData(pd);
@@ -211,11 +230,6 @@ const EmbedAppointment: React.FC = () => {
     const missing: string[] = [];
     if (!patientData?.name) missing.push('姓名');
     if (!patientData?.outpatient_number) missing.push('住院号');
-    if (!patientData?.phone) missing.push('联系方式');
-    if (!patientData?.diagnosis) missing.push('诊断');
-    if (!patientData?.drug_name) missing.push('用药');
-    if (!patientData?.eye) missing.push('治疗眼');
-    if (!patientData?.doctor) missing.push('注药医生');
     return missing;
   };
 
@@ -267,9 +281,7 @@ const EmbedAppointment: React.FC = () => {
     try {
       const saveRes = await apiClient.post('/embed/save', buildPayload('embed_direct'));
       if (saveRes.data?.patient?.id) setPatientData(prev => ({ ...prev, id: saveRes.data.patient.id }));
-      setSavedOk(true);
-      message.success('预约保存成功');
-      setTimeout(() => setSavedOk(false), 3000);
+      navigate('/embed/success');
     } catch (e: any) {
       message.error(e?.response?.data?.detail || '保存失败，请重试');
     } finally {
@@ -287,8 +299,8 @@ const EmbedAppointment: React.FC = () => {
     try {
       const saveRes = await apiClient.post('/embed/save', buildPayload('embed_print'));
       if (saveRes.data?.patient?.id) setPatientData(prev => ({ ...prev, id: saveRes.data.patient.id }));
-      message.success('预约保存成功，正在打印...');
       renderAndPrint(saveRes.data?.patient, saveRes.data?.appointments || []);
+      navigate('/embed/success');
     } catch (e: any) {
       message.error(e?.response?.data?.detail || '保存失败，请重试');
     } finally {
@@ -297,12 +309,96 @@ const EmbedAppointment: React.FC = () => {
   };
 
   const renderAndPrint = (patient: any, appts: any[]) => {
+    // ============================================================
+    // 切换打印模式：true = HTML模板，false = 图片覆盖文字
+    // ============================================================
+    const USE_HTML_TEMPLATE = true;
+
     const sorted = [...(Array.isArray(appts) ? appts : [])].sort((a, b) => (a.injection_count || 0) - (b.injection_count || 0));
     const getApptByCount = (cnt: number) => sorted.find(a => a.injection_count === cnt);
-    const fmtDate = (d?: string) => d ? dayjs(d).format('M月D日') : '';
-    // 用前端保存的 patientData（含原始 payload 字段），不用后端返回的 patient 对象
+    const fmtDate = (d?: string) => d ? dayjs(d).format('YYYY年M月D日') : '';
     const pd = patientData;
 
+    if (USE_HTML_TEMPLATE) {
+      const getStable = (n: number) => {
+        const a = getApptByCount(n);
+        if (!a?.appointment_date) return '';
+        return (a.condition_status === '趋差' || a.condition_status === '不稳定') ? '' : fmtDate(a.appointment_date);
+      };
+      const getUnstable = (n: number) => {
+        const a = getApptByCount(n);
+        if (!a?.appointment_date) return '';
+        return (a.condition_status === '趋差' || a.condition_status === '不稳定') ? fmtDate(a.appointment_date) : '';
+      };
+      fetch(`/print-template.html?t=${Date.now()}`).then(r => r.text()).then(html => {
+        html = html
+          .replace('{{姓名}}', pd?.name || '')
+          .replace('{{联系方式}}', pd?.phone || '')
+          .replace('{{左眼勾}}', (pd?.eye === '左眼' || pd?.eye === '双眼') ? '✓' : '')
+          .replace('{{右眼勾}}', (pd?.eye === '右眼' || pd?.eye === '双眼') ? '✓' : '')
+          .replace('{{诊断}}', pd?.diagnosis || '')
+          .replace('{{治疗药物}}', pd?.drug_name || '')
+          .replace('{{视力}}', '')
+          .replace('{{医生}}', sorted[0]?.doctor || pd?.doctor || '')
+          .replace('{{复诊电话}}', printPhoneNumber)
+          .replace('{{第1次}}', fmtDate(getApptByCount(1)?.appointment_date))
+          .replace('{{第2次}}', fmtDate(getApptByCount(2)?.appointment_date))
+          .replace('{{第3次}}', fmtDate(getApptByCount(3)?.appointment_date))
+          .replace('{{第4次}}', fmtDate(getApptByCount(4)?.appointment_date))
+          .replace('{{第5次稳定}}', getStable(5)).replace('{{第6次稳定}}', getStable(6))
+          .replace('{{第7次稳定}}', getStable(7)).replace('{{第8次稳定}}', getStable(8))
+          .replace('{{第9次稳定}}', getStable(9))
+          .replace('{{第5次不稳定}}', getUnstable(5)).replace('{{第6次不稳定}}', getUnstable(6))
+          .replace('{{第7次不稳定}}', getUnstable(7)).replace('{{第8次不稳定}}', getUnstable(8))
+          .replace('{{第9次不稳定}}', getUnstable(9));
+
+        const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+        const styleMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
+        const bodyContent = bodyMatch ? bodyMatch[1] : html;
+        const rawStyles = styleMatch ? styleMatch.map((s: string) => s.replace(/<\/?style[^>]*>/gi, '')).join('\n') : '';
+
+        // 先清理可能残留的旧打印区域
+        document.getElementById('html-print-area')?.remove();
+        document.getElementById('html-print-style')?.remove();
+
+        const printDiv = document.createElement('div');
+        printDiv.id = 'html-print-area';
+        printDiv.innerHTML = bodyContent;
+        document.body.appendChild(printDiv);
+
+        const styleEl = document.createElement('style');
+        styleEl.id = 'html-print-style';
+        const scopedStyles = rawStyles.replace(/([^{}]+)\{/g, (match: string, selector: string) => {
+          const trimmed = selector.trim();
+          if (trimmed.startsWith('@') || trimmed.startsWith('from') || trimmed.startsWith('to')) return match;
+          const scoped = trimmed.split(',').map((s: string) => `#html-print-area ${s.trim()}`).join(', ');
+          return `${scoped} {`;
+        });
+        styleEl.textContent = `
+          ${scopedStyles}
+          #html-print-area {
+            position: fixed; left: 0; top: 0; width: 100%; height: 100%;
+            background: white; z-index: 99999; overflow: auto;
+            font-family: "SimSun","宋体",serif; font-size: 14px; color: #000;
+            padding: 8mm 10mm; box-sizing: border-box;
+          }
+          @media print {
+            @page { size: A4 portrait; margin: 8mm; }
+            body > *:not(#html-print-area):not(#html-print-style) { display: none !important; }
+            #html-print-area { position: static !important; width: 194mm !important; height: auto !important; overflow: visible !important; padding: 0 !important; z-index: auto !important; }
+          }
+        `;
+        document.head.appendChild(styleEl);
+        window.print();
+        setTimeout(() => {
+          document.getElementById('html-print-area')?.remove();
+          document.getElementById('html-print-style')?.remove();
+        }, 1000);
+      }).catch(() => message.error('加载打印模板失败'));
+      return;
+    }
+
+    // ===== 图片覆盖文字打印（保留，切换 USE_HTML_TEMPLATE=false 即可恢复）=====
     const imgUrl = `${window.location.origin}/print-template.png`;
 
     const styleEl = document.createElement('style');
@@ -318,7 +414,7 @@ const EmbedAppointment: React.FC = () => {
         .print-container { width: 194mm !important; max-width: 194mm !important; height: auto !important; margin: 0 !important; padding: 0 !important; box-shadow: none !important; background: white !important; position: relative; }
         .print-container img { width: 100% !important; height: auto !important; display: block; }
         .overlay-text { position: absolute; font-family: "SimSun","宋体","SC",serif; font-weight: bold; }
-        .overlay-text.ot-name, .overlay-text.ot-phone, .overlay-text.ot-doctor { font-size: 22.7px !important; }
+        .overlay-text.ot-name, .overlay-text.ot-phone, .overlay-text.ot-doctor, .overlay-text.ot-clinicphone { font-size: 22.7px !important; }
         .overlay-text.ot-checkmark { font-size: 24.4px !important; }
         .overlay-text.ot-diagnosis { font-size: 20.9px !important; }
         .overlay-text.ot-drug { font-size: 20.9px !important; }
@@ -329,7 +425,7 @@ const EmbedAppointment: React.FC = () => {
       .print-container { width: 194mm !important; max-width: 194mm !important; position: relative; }
       .print-container img { width: 100% !important; height: auto !important; display: block; }
       .overlay-text { position: absolute; font-family: "SimSun","宋体","SC",serif; font-weight: bold; }
-      .overlay-text.ot-name, .overlay-text.ot-phone, .overlay-text.ot-doctor { font-size: 22.7px !important; }
+      .overlay-text.ot-name, .overlay-text.ot-phone, .overlay-text.ot-doctor, .overlay-text.ot-clinicphone { font-size: 22.7px !important; }
       .overlay-text.ot-checkmark { font-size: 24.4px !important; }
       .overlay-text.ot-diagnosis { font-size: 20.9px !important; }
       .overlay-text.ot-drug { font-size: 20.9px !important; }
@@ -344,12 +440,13 @@ const EmbedAppointment: React.FC = () => {
       <div class="print-container">
         <img src="${imgUrl}" alt="模板" />
         <span class="overlay-text ot-name" style="top:19.3%;left:16%">${pd?.name || ''}</span>
-        <span class="overlay-text ot-phone" style="top:19%;left:52%">${pd?.phone || ''}</span>
+        <span class="overlay-text ot-phone" style="top:19%;left:51.9%">${pd?.phone || ''}</span>
         ${(pd?.eye === '左眼' || pd?.eye === '双眼') ? '<span class="overlay-text ot-checkmark" style="top:19%;left:73%">✓</span>' : ''}
         ${(pd?.eye === '右眼' || pd?.eye === '双眼') ? '<span class="overlay-text ot-checkmark" style="top:19%;left:86%">✓</span>' : ''}
         <span class="overlay-text ot-diagnosis" style="top:23.3%;left:16%">${pd?.diagnosis || ''}</span>
-        <span class="overlay-text ot-drug" style="top:23.6%;left:51%">${pd?.drug_name || ''}</span>
+        <span class="overlay-text ot-drug" style="top:23.5%;left:51%">${pd?.drug_name || ''}</span>
         <span class="overlay-text ot-doctor" style="top:26.5%;left:16%">${sorted[0]?.doctor || pd?.doctor || ''}</span>
+        ${printPhoneNumber ? `<span class="overlay-text ot-clinicphone" style="top:26.5%;left:63%">${printPhoneNumber}</span>` : ''}
         <span class="overlay-text ot-time" style="top:40.5%;left:28%">${fmtDate(getApptByCount(1)?.appointment_date)}</span>
         <span class="overlay-text ot-time" style="top:40.5%;left:46%">${fmtDate(getApptByCount(2)?.appointment_date)}</span>
         <span class="overlay-text ot-time" style="top:40.5%;left:64%">${fmtDate(getApptByCount(3)?.appointment_date)}</span>
@@ -410,6 +507,87 @@ const EmbedAppointment: React.FC = () => {
 
         {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 12, borderRadius: 8 }} />}
         {savedOk && <Alert type="success" message="预约保存成功" showIcon style={{ marginBottom: 12, borderRadius: 8 }} />}
+
+        {/* 患者信息表单 */}
+        {patientData && (
+          <div style={{ background: '#f8faff', borderRadius: 8, padding: '12px 16px', marginBottom: 12, border: '1px solid #d6e4ff' }}>
+            <div style={{ fontSize: 13, fontWeight: 'bold', color: colors.blue, marginBottom: 8 }}>患者信息</div>
+            <Row gutter={12}>
+              <Col span={6}>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>姓名</div>
+                <input style={{ width: '100%', border: '1px solid #d9d9d9', borderRadius: 4, padding: '3px 8px', fontSize: 13 }}
+                  value={patientData.name || ''} onChange={e => setPatientData(prev => ({ ...prev, name: e.target.value }))} />
+              </Col>
+              <Col span={6}>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>联系方式</div>
+                <input style={{ width: '100%', border: '1px solid #d9d9d9', borderRadius: 4, padding: '3px 8px', fontSize: 13 }}
+                  value={patientData.phone || ''} onChange={e => setPatientData(prev => ({ ...prev, phone: e.target.value }))} />
+              </Col>
+              <Col span={6}>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>诊断</div>
+                <Select
+                  size="small"
+                  style={{ width: '100%' }}
+                  value={patientData.diagnosis || undefined}
+                  placeholder="请选择诊断"
+                  onChange={v => setPatientData(prev => ({ ...prev, diagnosis: v }))}
+                  options={[
+                    ...(patientData.diagnosis && !diagnoses.find(d => d.value === patientData.diagnosis)
+                      ? [{ label: patientData.diagnosis, value: patientData.diagnosis }] : []),
+                    ...diagnoses,
+                  ]}
+                  showSearch
+                  filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                  allowClear
+                />
+              </Col>
+              <Col span={6}>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>用药</div>
+                <Select
+                  size="small"
+                  style={{ width: '100%' }}
+                  value={patientData.drug_name || undefined}
+                  placeholder="请选择药物"
+                  onChange={v => setPatientData(prev => ({ ...prev, drug_name: v }))}
+                  options={[
+                    ...(patientData.drug_name && !drugs.find(d => d.value === patientData.drug_name)
+                      ? [{ label: patientData.drug_name, value: patientData.drug_name }] : []),
+                    ...drugs,
+                  ]}
+                  showSearch
+                  filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                  allowClear
+                />
+              </Col>
+            </Row>
+            <Row gutter={12} style={{ marginTop: 8 }}>
+              <Col span={6}>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>治疗眼</div>
+                <Select
+                  size="small"
+                  style={{ width: '100%' }}
+                  value={patientData.eye || '双眼'}
+                  onChange={v => setPatientData(prev => ({ ...prev, eye: v }))}
+                  options={[
+                    { label: '左眼', value: '左眼' },
+                    { label: '右眼', value: '右眼' },
+                    { label: '双眼', value: '双眼' },
+                  ]}
+                />
+              </Col>
+              <Col span={6}>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>注药医生</div>
+                <input style={{ width: '100%', border: '1px solid #d9d9d9', borderRadius: 4, padding: '3px 8px', fontSize: 13 }}
+                  value={patientData.doctor || ''} onChange={e => setPatientData(prev => ({ ...prev, doctor: e.target.value }))} />
+              </Col>
+              <Col span={6}>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>住院号</div>
+                <input style={{ width: '100%', border: '1px solid #d9d9d9', borderRadius: 4, padding: '3px 8px', fontSize: 13 }}
+                  value={patientData.outpatient_number || ''} onChange={e => setPatientData(prev => ({ ...prev, outpatient_number: e.target.value }))} />
+              </Col>
+            </Row>
+          </div>
+        )}
 
         <Tabs
           activeKey={activeTab}
@@ -578,25 +756,28 @@ const EmbedAppointment: React.FC = () => {
         )}
 
         <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 12 }}>
-          <Button
-            type="primary"
-            size="large"
-            icon={<CheckCircleOutlined />}
-            loading={saving}
-            onClick={handleSave}
-            style={{ borderRadius: 8, height: 44, padding: '0 32px' }}
-          >
-            确认预约
-          </Button>
-          <Button
-            size="large"
-            icon={<PrinterOutlined />}
-            loading={printSaving}
-            onClick={handleSaveAndPrint}
-            style={{ borderRadius: 8, height: 44, padding: '0 32px', borderColor: colors.blue, color: colors.blue }}
-          >
-            打印预约单
-          </Button>
+          {activeTab === 'bozhu' ? (
+            <Button
+              size="large"
+              icon={<PrinterOutlined />}
+              loading={printSaving}
+              onClick={handleSaveAndPrint}
+              style={{ borderRadius: 8, height: 44, padding: '0 32px', borderColor: colors.blue, color: colors.blue }}
+            >
+              打印预约单
+            </Button>
+          ) : (
+            <Button
+              type="primary"
+              size="large"
+              icon={<CheckCircleOutlined />}
+              loading={saving}
+              onClick={handleSave}
+              style={{ borderRadius: 8, height: 44, padding: '0 32px' }}
+            >
+              确认预约
+            </Button>
+          )}
         </div>
       </div>
     </div>

@@ -28,6 +28,8 @@ const Patients: React.FC = () => {
   // Treatment Progress State
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
   const [selectedPatientForProgress, setSelectedPatientForProgress] = useState<Patient | null>(null);
+  const [pageSize, setPageSize] = useState(20);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Import Modal State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -708,7 +710,7 @@ const Patients: React.FC = () => {
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
             添加患者
           </Button>
-          <Button icon={<LinkOutlined />} onClick={() => { embedForm.resetFields(); setEmbedUrl(''); setIsEmbedModalOpen(true); }}>
+          <Button icon={<LinkOutlined />} onClick={() => { embedForm.resetFields(); setEmbedUrl(''); setIsEmbedModalOpen(true); }} style={{ display: 'none' }}>
             预约链接
           </Button>
         </Space>
@@ -724,7 +726,20 @@ const Patients: React.FC = () => {
         })} 
         rowKey="id" 
         loading={loading}
-        pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `共 ${total} 条`, pageSizeOptions: ['10', '20', '50', '100'] }}
+        pagination={{ 
+          current: currentPage,
+          pageSize, 
+          showSizeChanger: true, 
+          showTotal: (total) => `共 ${total} 条`, 
+          pageSizeOptions: [10, 20, 50, 100], 
+          onChange: (page, size) => {
+            setCurrentPage(page);
+            if (size !== pageSize) {
+              setPageSize(size);
+              setCurrentPage(1);
+            }
+          }
+        }}
       />
 
       {/* Add/Edit Patient Modal */}

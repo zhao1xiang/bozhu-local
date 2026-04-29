@@ -55,6 +55,12 @@ def _try_connect(driver, host, port, database, username, password, charset=None)
 def get_his_conn(hospital_config, max_retries=3, retry_delay=5):
     """根据医院配置获取 HIS 数据库连接"""
     his_config = hospital_config["his"]
+    his_type = his_config.get("type", "mssql")
+
+    if his_type == "cache":
+        return _get_cache_conn(hospital_config, max_retries, retry_delay)
+
+    # 默认 mssql 连接
     hospital_name = hospital_config["name"]
     host = his_config["host"]
     port = his_config.get("port", 1433)
@@ -68,20 +74,15 @@ def get_his_conn(hospital_config, max_retries=3, retry_delay=5):
     for attempt in range(max_retries):
         try:
             logger.debug(f"尝试连接 {hospital_name} HIS 数据库 (第 {attempt + 1} 次)")
-
-            # 先用首选编码尝试
             try:
                 conn = _try_connect(driver, host, port, database, username, password, preferred_charset)
                 logger.info(f"{hospital_name} HIS 数据库连接成功")
                 return conn
             except Exception as e:
                 logger.debug(f"首选编码 {preferred_charset} 连接失败: {e}")
-
-            # 再用无编码参数尝试
             conn = _try_connect(driver, host, port, database, username, password)
             logger.warning(f"{hospital_name} HIS 数据库连接成功（默认编码）")
             return conn
-
         except Exception as e:
             logger.warning(f"{hospital_name} HIS 数据库连接失败 (第 {attempt + 1} 次): {e}")
             if attempt < max_retries - 1:
@@ -92,6 +93,58 @@ def get_his_conn(hospital_config, max_retries=3, retry_delay=5):
                 raise
 
 
+def _get_cache_conn(hospital_config, max_retries=3, retry_delay=5):
+    """连接 InterSystems Caché 数据库（通过 ODBC）"""
+    his_config = hospital_config["his"]
+    hospital_name = hospital_config["name"]
+    host = his_config["host"]
+    port = his_config.get("port", 1972)
+    namespace = his_config.get("namespace", "USER")
+    username = his_config["user"]
+    password = his_config["password"]
+
+    # Caché ODBC 驱动名称（需要客户机器安装）
+    cache_drivers = [
+        "InterSystems ODBC35",
+        "InterSystems ODBC",
+        "Cache ODBC",
+    ]
+
+    installed = pyodbc.drivers()
+    driver = None
+    for d in cache_drivers:
+        if d in installed:
+            driver = d
+            break
+
+    if not driver:
+        raise RuntimeError(f"未找到 Caché ODBC 驱动，已安装驱动: {installed}")
+
+    logger.info(f"使用 Caché ODBC 驱动: {driver}")
+
+    conn_str = (
+        f"DRIVER={{{driver}}};"
+        f"SERVER={host};"
+        f"PORT={port};"
+        f"NAMESPACE={namespace};"
+        f"UID={username};"
+        f"PWD={password};"
+        f"PROTOCOL=TCP;"
+    )
+
+    for attempt in range(max_retries):
+        try:
+            conn = pyodbc.connect(conn_str, timeout=30)
+            logger.info(f"{hospital_name} Caché 数据库连接成功")
+            return conn
+        except Exception as e:
+            logger.warning(f"{hospital_name} Caché 连接失败 (第 {attempt + 1} 次): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+            else:
+                raise
+
+
 def get_adapter(adapter_name):
     """动态加载适配器模块"""
     try:
@@ -99,6 +152,12 @@ def get_adapter(adapter_name):
             from adapter.hospital1_adapter import convert_patient
         elif adapter_name == "hospital2_adapter":
             from adapter.hospital2_adapter import convert_patient
+        elif adapter_name == "hospital3_adapter":
+            from adapter.hospital3_adapter import convert_patient
+        elif adapter_name == "hospital4_adapter":
+            from adapter.hospital4_adapter import convert_patient
+        elif adapter_name == "hospital5_adapter":
+            from adapter.hospital5_adapter import convert_patient
         else:
             raise ValueError(f"未知的适配器: {adapter_name}")
         logger.debug(f"成功加载适配器: {adapter_name}")

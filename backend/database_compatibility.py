@@ -36,6 +36,7 @@ class DatabaseCompatibilityHandler:
             
             if not issues:
                 logger.info("✅ 数据库兼容性良好，无需修复")
+                self._ensure_embed_log_table()
                 return True
             
             # 3. 应用安全修复
@@ -45,6 +46,7 @@ class DatabaseCompatibilityHandler:
             if success:
                 logger.info("✅ 数据库兼容性修复完成")
                 self.verify_data_integrity()
+                self._ensure_embed_log_table()
                 return True
             else:
                 logger.error("❌ 修复失败，恢复备份...")
@@ -122,8 +124,7 @@ class DatabaseCompatibilityHandler:
         except Exception as e:
             logger.error(f"检测兼容性问题时出错: {e}")
             
-        return issues
-    
+        return issues    
     def check_vision_field_types(self, cursor) -> List[str]:
         """检查视力字段类型"""
         try:
@@ -203,9 +204,11 @@ class DatabaseCompatibilityHandler:
                     ('follow_up_date', 'TEXT', ''),
                     ('next_follow_up_date', 'TEXT', ''),
                     ('diagnosis', 'TEXT', ''),
+                    ('time_slot', 'TEXT', '上午'),
                 ],
                 'data_dictionary': [
                     ('extra', 'TEXT', ''),
+                    ('ward', 'TEXT', ''),
                 ],
             }
             
@@ -549,6 +552,47 @@ class DatabaseCompatibilityHandler:
         except Exception as e:
             logger.error(f"数据完整性验证失败: {e}")
     
+    def _ensure_embed_log_table(self):
+        """确保 embed_log 表存在，并确保 user 表有 role/wards/is_active 字段"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            # embed_log 表
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS embed_log (
+                    id VARCHAR PRIMARY KEY,
+                    call_type VARCHAR NOT NULL,
+                    url TEXT,
+                    params TEXT,
+                    outpatient_number TEXT,
+                    patient_name TEXT,
+                    client_ip TEXT,
+                    success INTEGER DEFAULT 1,
+                    error_msg TEXT,
+                    created_at DATETIME NOT NULL
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS ix_embed_log_outpatient ON embed_log (outpatient_number)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS ix_embed_log_created_at ON embed_log (created_at)")
+
+            # user 表新字段
+            for col, col_type, default in [
+                ('is_active', 'INTEGER', '1'),
+                ('role', 'TEXT', "'admin'"),
+                ('wards', 'TEXT', 'NULL'),
+            ]:
+                try:
+                    cursor.execute(f"ALTER TABLE user ADD COLUMN {col} {col_type} DEFAULT {default}")
+                    logger.info(f"  ✅ 添加字段: user.{col}")
+                except Exception:
+                    pass  # 已存在
+
+            conn.commit()
+            conn.close()
+            logger.info("✅ embed_log 表及 user 字段已就绪")
+        except Exception as e:
+            logger.error(f"创建 embed_log 表失败: {e}")
+
     def restore_backup(self):
         """恢复备份"""
         if self.backup_path and os.path.exists(self.backup_path):

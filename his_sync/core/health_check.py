@@ -38,19 +38,21 @@ def validate_config():
             raise ValueError(f"激活的医院 {active_hospital} 在 hospitals 配置中不存在")
         
         hospital_config = cfg["hospitals"][active_hospital]
-        required_keys = {
-            "his": ["host", "port", "user", "password", "db"],
-            "view": ["patient"]
-        }
-        
-        for section, keys in required_keys.items():
-            if section not in hospital_config:
-                raise ValueError(f"激活医院 {active_hospital} 配置缺少 {section} 部分")
-            
-            for key in keys:
-                if key not in hospital_config[section]:
-                    raise ValueError(f"激活医院 {active_hospital} 配置 {section} 部分缺少 {key} 配置")
-        
+        his_type = hospital_config.get("his", {}).get("type", "mssql")
+
+        # webservice 和 cache 类型不需要检查 host/port/user/password/db/view
+        if his_type not in ("webservice", "cache"):
+            required_keys = {
+                "his": ["host", "port", "user", "password", "db"],
+                "view": ["patient"]
+            }
+            for section, keys in required_keys.items():
+                if section not in hospital_config:
+                    raise ValueError(f"激活医院 {active_hospital} 配置缺少 {section} 部分")
+                for key in keys:
+                    if key not in hospital_config[section]:
+                        raise ValueError(f"激活医院 {active_hospital} 配置 {section} 部分缺少 {key} 配置")
+
         if "adapter" not in hospital_config:
             raise ValueError(f"激活医院 {active_hospital} 配置缺少 adapter 配置")
         
@@ -84,20 +86,37 @@ def check_database_connections():
     except Exception as e:
         logger.error(f"SQLite 连接检查失败: {e}")
     
-    # 检查当前激活医院的 HIS 连接
+    # 检查当前激活医院的 HIS 连接（webservice 类型跳过）
     try:
         active_hospital = cfg["active_hospital"]
         hospital_config = cfg["hospitals"][active_hospital]
         hospital_name = hospital_config["name"]
-        
-        conn = get_his_conn(hospital_config)
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1")
-        cursor.fetchone()
-        cursor.close()
-        conn.close()
-        results["his"] = True
-        logger.info(f"{hospital_name} HIS 连接检查通过")
+        his_type = hospital_config.get("his", {}).get("type", "mssql")
+
+        if his_type == "webservice":
+            logger.info(f"{hospital_name} 为 WebService 类型，跳过 HIS 连接检查")
+            results["his"] = True
+        elif his_type == "cache":
+            logger.info(f"{hospital_name} 为 Caché 类型，跳过 HIS 连接检查（需安装 InterSystems ODBC 驱动）")
+            results["his"] = True
+        elif his_type == "cache":
+            # Caché 类型尝试连接
+            try:
+                conn = get_his_conn(hospital_config)
+                conn.close()
+                results["his"] = True
+                logger.info(f"{hospital_name} Caché 连接检查通过")
+            except Exception as e:
+                logger.error(f"{hospital_name} Caché 连接检查失败: {e}")
+        else:
+            conn = get_his_conn(hospital_config)
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+            cursor.close()
+            conn.close()
+            results["his"] = True
+            logger.info(f"{hospital_name} HIS 连接检查通过")
     except Exception as e:
         logger.error(f"HIS 连接检查失败: {e}")
     

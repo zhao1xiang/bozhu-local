@@ -3,6 +3,7 @@ import yaml
 import signal
 import sys
 from sync.patient_sync import sync_patient
+from sync.webservice_sync import sync_webservice
 from core.logger import logger
 from core.health_check import health_check
 
@@ -38,9 +39,13 @@ class SyncService:
         while self.running:
             try:
                 sync_patient()
-                
             except Exception as e:
-                logger.error(f"同步失败: {e}", exc_info=True)
+                logger.error(f"SQL 同步失败: {e}", exc_info=True)
+
+            try:
+                sync_webservice()
+            except Exception as e:
+                logger.error(f"WebService 同步失败: {e}", exc_info=True)
 
             # 分段睡眠，以便能够响应关闭信号
             for _ in range(interval):

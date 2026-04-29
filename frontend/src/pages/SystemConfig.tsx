@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Input, InputNumber, Switch, message, Card, Tabs, Select} from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { apiClient } from '@/api/client';
@@ -56,6 +56,7 @@ const DictionaryTable: React.FC<{ category: string, title: string }> = ({ catego
     form.setFieldsValue({
       ...item,
       extra: item.extra ? item.extra.split(',').filter(Boolean) : [],
+      ward: (item as any).ward || '',
     });
     setIsModalOpen(true);
   };
@@ -122,15 +123,23 @@ const DictionaryTable: React.FC<{ category: string, title: string }> = ({ catego
       dataIndex: 'value',
       key: 'value',
     },
-    ...(category === 'doctor' ? [{
-      title: '玻注日',
-      dataIndex: 'extra',
-      key: 'extra',
-      render: (extra: string) => {
-        if (!extra) return <span style={{ color: '#999' }}>全局配置</span>;
-        return extra.split(',').filter(Boolean).map(d => WEEKDAY_MAP[d] || d).join('、');
+    ...(category === 'doctor' ? [
+      {
+        title: '玻注日',
+        dataIndex: 'extra',
+        key: 'extra',
+        render: (extra: string) => {
+          if (!extra) return <span style={{ color: '#999' }}>全局配置</span>;
+          return extra.split(',').filter(Boolean).map((d: string) => WEEKDAY_MAP[d] || d).join('、');
+        }
+      },
+      {
+        title: '病区',
+        dataIndex: 'ward',
+        key: 'ward',
+        render: (ward: string) => ward || <span style={{ color: '#999' }}>-</span>,
       }
-    }] : []),
+    ] : []),
     {
       title: '排序',
       dataIndex: 'sort_order',
@@ -182,26 +191,31 @@ const DictionaryTable: React.FC<{ category: string, title: string }> = ({ catego
             <Input placeholder={getPlaceholderText('value')} />
           </Form.Item>
           {category === 'doctor' && (
-            <Form.Item
-              name="extra"
-              label="玻注日"
-              extra="该医生的玻注日，不设置则使用全局配置"
-            >
-              <Select
-                mode="multiple"
-                placeholder="选择玻注日（可多选，不选则用全局配置）"
-                allowClear
-                options={[
-                  { label: '周一', value: '1' },
-                  { label: '周二', value: '2' },
-                  { label: '周三', value: '3' },
-                  { label: '周四', value: '4' },
-                  { label: '周五', value: '5' },
-                  { label: '周六', value: '6' },
-                  { label: '周日', value: '7' },
-                ]}
-              />
-            </Form.Item>
+            <>
+              <Form.Item
+                name="extra"
+                label="玻注日"
+                extra="该医生的玻注日，不设置则使用全局配置"
+              >
+                <Select
+                  mode="multiple"
+                  placeholder="选择玻注日（可多选，不选则用全局配置）"
+                  allowClear
+                  options={[
+                    { label: '周一', value: '1' },
+                    { label: '周二', value: '2' },
+                    { label: '周三', value: '3' },
+                    { label: '周四', value: '4' },
+                    { label: '周五', value: '5' },
+                    { label: '周六', value: '6' },
+                    { label: '周日', value: '7' },
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item name="ward" label="病区" extra="该医生所属病区，多个病区用逗号分隔，如 1,2">
+                <Input placeholder="例如：1 或 1,2" />
+              </Form.Item>
+            </>
           )}
           <Form.Item name="sort_order" label="排序 (越小越靠前)">
             <InputNumber style={{ width: '100%' }} />
@@ -398,40 +412,121 @@ const ChangePassword: React.FC = () => {
   );
 };
 
+// ===== 账号管理组件 =====
+interface UserItem { id: number; username: string; is_active: boolean; role: string; wards?: string; }
+
+const AccountManagement: React.FC = () => {
+  const [users, setUsers] = React.useState<UserItem[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const [editingUser, setEditingUser] = React.useState<UserItem | null>(null);
+  const [form] = Form.useForm();
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const res = await apiClient.get<UserItem[]>('/users');
+      setUsers(res.data);
+    } catch { message.error('获取账号列表失败'); }
+    finally { setLoading(false); }
+  };
+
+  React.useEffect(() => { fetchUsers(); }, []);
+
+  const handleAddUser = () => {
+    setEditingUser(null);
+    form.resetFields();
+    form.setFieldsValue({ role: 'ward', is_active: true });
+    setIsModalOpen(true);
+  };
+
+  const handleEditUser = (u: UserItem) => {
+    setEditingUser(u);
+    form.setFieldsValue({ ...u, password: '' });
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteUser = async (id: number) => {
+    try {
+      await apiClient.delete(`/users/${id}`);
+      message.success('删除成功');
+      fetchUsers();
+    } catch (e: any) { message.error(e?.response?.data?.detail || '删除失败'); }
+  };
+
+  const handleOkUser = async () => {
+    try {
+      const values = await form.validateFields();
+      if (editingUser) {
+        const payload: any = { role: values.role, wards: values.wards, is_active: values.is_active };
+        if (values.password) payload.password = values.password;
+        await apiClient.put(`/users/${editingUser.id}`, payload);
+        message.success('更新成功');
+      } else {
+        await apiClient.post('/users', values);
+        message.success('创建成功');
+      }
+      setIsModalOpen(false);
+      fetchUsers();
+    } catch (e: any) { message.error(e?.response?.data?.detail || '操作失败'); }
+  };
+
+  const userColumns = [
+    { title: '用户名', dataIndex: 'username', key: 'username' },
+    { title: '角色', dataIndex: 'role', key: 'role', render: (r: string) => r === 'admin' ? '管理员' : '病区账号' },
+    { title: '可管理病区', dataIndex: 'wards', key: 'wards', render: (w: string) => w || '-' },
+    { title: '状态', dataIndex: 'is_active', key: 'is_active', render: (v: boolean) => <Switch checked={v} disabled /> },
+    {
+      title: '操作', key: 'action',
+      render: (_: any, record: UserItem) => (
+        <span>
+          <Button type="link" icon={<EditOutlined />} onClick={() => handleEditUser(record)}>编辑</Button>
+          {record.username !== 'admin' && (
+            <Button type="link" danger icon={<DeleteOutlined />} onClick={() => handleDeleteUser(record.id)}>删除</Button>
+          )}
+        </span>
+      )
+    }
+  ];
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAddUser}>添加账号</Button>
+      </div>
+      <Table columns={userColumns} dataSource={users} rowKey="id" loading={loading} />
+      <Modal title={editingUser ? '编辑账号' : '添加账号'} open={isModalOpen} onOk={handleOkUser} onCancel={() => setIsModalOpen(false)}>
+        <Form form={form} layout="vertical">
+          {!editingUser && (
+            <Form.Item name="username" label="用户名" rules={[{ required: true }]}><Input /></Form.Item>
+          )}
+          <Form.Item name="password" label={editingUser ? '新密码（不填则不修改）' : '密码'} rules={editingUser ? [] : [{ required: true }]}>
+            <Input.Password />
+          </Form.Item>
+          <Form.Item name="role" label="角色">
+            <Select options={[{ label: '管理员', value: 'admin' }, { label: '病区账号', value: 'ward' }]} />
+          </Form.Item>
+          <Form.Item name="wards" label="可管理病区" extra="多个病区用逗号分隔，如 1,2；管理员留空表示全部">
+            <Input placeholder="例如：1 或 1,2" />
+          </Form.Item>
+          <Form.Item name="is_active" label="启用" valuePropName="checked"><Switch /></Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+};
+
 const SystemConfig: React.FC = () => {
   return (
     <Card title="系统配置">
       <Tabs items={[
-        {
-          key: 'doctor',
-          label: '注药医生管理',
-          children: <DictionaryTable category="doctor" title="医生" />
-        },
-        {
-          key: 'cost_type',
-          label: '费别管理',
-          children: <DictionaryTable category="cost_type" title="费别" />
-        },
-        {
-          key: 'drug',
-          label: '药品管理',
-          children: <DictionaryTable category="drug" title="药品" />
-        },
-        {
-          key: 'diagnosis',
-          label: '疾病诊断管理',
-          children: <DictionaryTable category="diagnosis" title="疾病诊断" />
-        },
-        {
-          key: 'general',
-          label: '通用设置',
-          children: <GeneralSettings />
-        },
-        {
-          key: 'security',
-          label: '安全设置',
-          children: <ChangePassword />
-        }
+        { key: 'doctor', label: '注药医生管理', children: <DictionaryTable category="doctor" title="医生" /> },
+        { key: 'cost_type', label: '费别管理', children: <DictionaryTable category="cost_type" title="费别" /> },
+        { key: 'drug', label: '药品管理', children: <DictionaryTable category="drug" title="药品" /> },
+        { key: 'diagnosis', label: '疾病诊断管理', children: <DictionaryTable category="diagnosis" title="疾病诊断" /> },
+        { key: 'general', label: '通用设置', children: <GeneralSettings /> },
+        // { key: 'accounts', label: '账号管理', children: <AccountManagement /> },
+        { key: 'security', label: '安全设置', children: <ChangePassword /> },
       ]} />
     </Card>
   );

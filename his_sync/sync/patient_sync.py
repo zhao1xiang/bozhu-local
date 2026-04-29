@@ -110,6 +110,11 @@ def upsert_patient(cur, p):
     left_eye = p.get("left_eye")
     right_eye = p.get("right_eye")
     injection_count = p.get("injection_count")
+    drug_type = p.get("drug_type")
+    left_vision = p.get("left_vision")
+    right_vision = p.get("right_vision")
+    left_vision_corrected = p.get("left_vision_corrected")
+    right_vision_corrected = p.get("right_vision_corrected")
 
     if outpatient_number:
         # 检查是否存在
@@ -155,6 +160,25 @@ def upsert_patient(cur, p):
             if injection_count is not None:
                 update_fields.append("injection_count=?")
                 update_values.append(injection_count)
+
+            # drug_type 有值时更新
+            if drug_type:
+                update_fields.append("drug_type=?")
+                update_values.append(drug_type)
+
+            # 视力字段有值时更新
+            if left_vision is not None:
+                update_fields.append("left_vision=?")
+                update_values.append(left_vision)
+            if right_vision is not None:
+                update_fields.append("right_vision=?")
+                update_values.append(right_vision)
+            if left_vision_corrected is not None:
+                update_fields.append("left_vision_corrected=?")
+                update_values.append(left_vision_corrected)
+            if right_vision_corrected is not None:
+                update_fields.append("right_vision_corrected=?")
+                update_values.append(right_vision_corrected)
             
             update_values.append(outpatient_number)  # WHERE 条件
             
@@ -171,23 +195,21 @@ def upsert_patient(cur, p):
                 """
                 INSERT INTO patient
                 (id, name, outpatient_number, medical_card_number, phone, 
-                 diagnosis, patient_type, left_eye, right_eye, injection_count, status, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 diagnosis, drug_type, patient_type, left_eye, right_eye, injection_count,
+                 left_vision, right_vision, left_vision_corrected, right_vision_corrected,
+                 status, is_deleted, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     str(uuid.uuid4()),
-                    name,
-                    outpatient_number,
-                    medical_card_number,
-                    phone,
-                    diagnosis,
-                    patient_type,
+                    name, outpatient_number, medical_card_number, phone,
+                    diagnosis, drug_type, patient_type,
                     left_eye if left_eye is not None else False,
                     right_eye if right_eye is not None else False,
                     injection_count,
-                    'active',
-                    datetime.now(),
-                    datetime.now()
+                    left_vision, right_vision, left_vision_corrected, right_vision_corrected,
+                    'active', 0,
+                    datetime.now(), datetime.now()
                 )
             )
             return "inserted"
@@ -197,31 +219,38 @@ def upsert_patient(cur, p):
             """
             INSERT INTO patient
             (id, name, outpatient_number, medical_card_number, phone,
-             diagnosis, patient_type, left_eye, right_eye, injection_count, status, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+             diagnosis, drug_type, patient_type, left_eye, right_eye, injection_count,
+             left_vision, right_vision, left_vision_corrected, right_vision_corrected,
+             status, is_deleted, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 str(uuid.uuid4()),
-                name,
-                None,
-                medical_card_number,
-                phone,
-                diagnosis,
-                patient_type,
+                name, None, medical_card_number, phone,
+                diagnosis, drug_type, patient_type,
                 left_eye if left_eye is not None else False,
                 right_eye if right_eye is not None else False,
                 injection_count,
-                'active',
-                datetime.now(),
-                datetime.now()
+                left_vision, right_vision, left_vision_corrected, right_vision_corrected,
+                'active', 0,
+                datetime.now(), datetime.now()
             )
         )
         return "inserted"
 
 
 def sync_patient():
-    """同步当前激活医院的患者数据"""
+    """同步当前激活医院的患者数据（仅 SQL 视图类型）"""
     try:
+        cfg = load_config()
+        active_hospital = cfg.get("active_hospital")
+        hospital_config = cfg["hospitals"].get(active_hospital, {})
+        his_type = hospital_config.get("his", {}).get("type", "mssql")
+
+        # webservice 类型由 sync_webservice 处理，跳过
+        if his_type == "webservice":
+            logger.debug(f"当前激活医院为 WebService 类型，patient_sync 跳过")
+            return
         state = load_state()
         
         logger.info("开始患者数据同步")
@@ -229,15 +258,28 @@ def sync_patient():
         with get_db_connections() as (his_cursor, local_cursor, local_conn, hospital_config):
             hospital_name = hospital_config["name"]
             hospital_id = hospital_config["id"]
-            view = hospital_config["view"]["patient"]
+            his_type = hospital_config.get("his", {}).get("type", "mssql")
             adapter_name = hospital_config["adapter"]
-            
+
             # 获取适配器
             convert_patient = get_adapter(adapter_name)
-            
-            # 查询源数据
-            logger.debug(f"查询 {hospital_name} 视图: {view}")
-            his_cursor.execute(f"SELECT * FROM {view}")
+
+            # 根据类型查询数据
+            if his_type == "cache":
+                # Caché 数据库：调用存储过程
+                procedure = hospital_config["his"].get("procedure", "")
+                if not procedure:
+                    logger.error(f"{hospital_name} Caché 类型缺少 procedure 配置")
+                    return
+                today = datetime.now().strftime("%Y-%m-%d")
+                sql = f"CALL {procedure}('{today}', '{today}')"
+                logger.debug(f"执行 Caché 存储过程: {sql}")
+                his_cursor.execute(sql)
+            else:
+                # SQL Server/MySQL：查询视图
+                view = hospital_config["view"]["patient"]
+                logger.debug(f"查询 {hospital_name} 视图: {view}")
+                his_cursor.execute(f"SELECT * FROM {view}")
             
             # 获取列名
             columns = [column[0] for column in his_cursor.description]

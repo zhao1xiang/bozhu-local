@@ -10,6 +10,7 @@ class DataDictionaryBase(SQLModel):
     sort_order: int = 0
     is_active: bool = True
     extra: Optional[str] = Field(default=None, description="扩展字段，医生可存玻注日")
+    ward: Optional[str] = Field(default=None, description="病区，医生专用")
 
 class DataDictionary(DataDictionaryBase, table=True):
     __tablename__ = "data_dictionary"

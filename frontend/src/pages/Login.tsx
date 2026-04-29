@@ -85,8 +85,13 @@ const Login: React.FC = () => {
                 }
             });
 
-            // 传递记住状态给 login 函数
-            login(response.data.access_token, values.remember);
+            login(
+                response.data.access_token,
+                response.data.role || 'admin',
+                response.data.wards || '',
+                response.data.username || '',
+                values.remember,
+            );
             message.success('登录成功');
             navigate('/app/dashboard');
         } catch (error: any) {

@@ -132,13 +132,20 @@ const Appointments: React.FC = () => {
 
     console.log('Batch generation starting from:', { startInjectionCount, baseDate: baseDate.format('YYYY-MM-DD') });
 
-    // 生成4次预约
+    // 生成4次预约，优先用当前选中医生的波注日
+    const currentDoctor = form.getFieldValue('doctor');
+    const currentDoctorItem = currentDoctor ? doctors.find((d: any) => d.value === currentDoctor) : null;
+    const doctorWeekdaysBatch = currentDoctorItem?.extra
+      ? String(currentDoctorItem.extra).split(',').map((s: string) => s.trim()).filter(Boolean)
+      : null;
+    const effectiveWeekdaysBatch = doctorWeekdaysBatch && doctorWeekdaysBatch.length > 0 ? doctorWeekdaysBatch : injectionWeekdays;
+
     const batchList = [];
     let currentDate = baseDate;
     
     for (let i = 0; i < 4; i++) {
       const injectionCount = startInjectionCount + i;
-      const date = getNearestInjectionDate(currentDate, injectionWeekdays);
+      const date = getNearestInjectionDate(currentDate, effectiveWeekdaysBatch);
       
       batchList.push({
         appointment_date: date,
@@ -166,6 +173,8 @@ const Appointments: React.FC = () => {
   const injectionCount = Form.useWatch('injection_count', form);
   const appointmentDate = Form.useWatch('appointment_date', form);
   const [loading, setLoading] = useState(false);
+  const [apptPageSize, setApptPageSize] = useState(20);
+  const [apptCurrentPage, setApptCurrentPage] = useState(1);
 
   const fetchAppointments = async (filters: any = {}) => {
     setLoading(true);
@@ -384,7 +393,14 @@ const Appointments: React.FC = () => {
       }
     }
 
-    const firstInjectionDate = getNearestInjectionDate(baseDate, weekdays);
+    // 如果上次医生有配置波注日(extra)，用医生的波注日，否则用传入的weekdays
+    const lastDoctorItem = lastDoctor ? doctors.find((d: any) => d.value === lastDoctor) : null;
+    const doctorWeekdaysAdd = lastDoctorItem?.extra
+      ? String(lastDoctorItem.extra).split(',').map((s: string) => s.trim()).filter(Boolean)
+      : null;
+    const effectiveWeekdaysAdd = doctorWeekdaysAdd && doctorWeekdaysAdd.length > 0 ? doctorWeekdaysAdd : weekdays;
+
+    const firstInjectionDate = getNearestInjectionDate(baseDate, effectiveWeekdaysAdd);
 
     const initialValues: any = {
       appointment_date: firstInjectionDate,
@@ -539,7 +555,14 @@ const Appointments: React.FC = () => {
 
       console.log('Calculated values:', { maxInjectionCount, nextInjectionCount, treatmentPhase, baseDate: baseDate.format('YYYY-MM-DD') });
 
-      const firstInjectionDate = getNearestInjectionDate(baseDate, injectionWeekdays);
+      // 如果上次医生有配置波注日(extra)，用医生的波注日，否则用系统全局
+      const lastDoctorItem = lastDoctor ? doctors.find((d: any) => d.value === lastDoctor) : null;
+      const doctorWeekdays = lastDoctorItem?.extra
+        ? String(lastDoctorItem.extra).split(',').map((s: string) => s.trim()).filter(Boolean)
+        : null;
+      const effectiveWeekdays = doctorWeekdays && doctorWeekdays.length > 0 ? doctorWeekdays : injectionWeekdays;
+
+      const firstInjectionDate = getNearestInjectionDate(baseDate, effectiveWeekdays);
 
       // 先重置表单中与患者相关的字段
       form.setFieldsValue({
@@ -984,7 +1007,7 @@ const Appointments: React.FC = () => {
           dataSource={appointments}
           rowKey="id"
           loading={loading}
-          pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `共 ${total} 条`, pageSizeOptions: ['10', '20', '50', '100'] }}
+          pagination={{ pageSize: apptPageSize, current: apptCurrentPage, showSizeChanger: true, showTotal: (total) => `共 ${total} 条`, pageSizeOptions: [10, 20, 50, 100], onChange: (page, size) => { setApptCurrentPage(page); setApptPageSize(size); }, onShowSizeChange: (_, size) => { setApptPageSize(size); setApptCurrentPage(1); } }}
         />
       </Card>
 
@@ -1016,6 +1039,44 @@ const Appointments: React.FC = () => {
                   }
                   onChange={handlePatientChange}
                   options={patients.map(p => ({ label: `${p.name}${p.phone ? ` (${p.phone})` : ''}`, value: p.id }))}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={24}>
+              <Form.Item name="doctor" label="注药医生">
+                <Select
+                  placeholder="选择医生"
+                  options={doctors}
+                  onChange={(val) => {
+                    // 选了医生后，如果医生配置了波注日(extra字段)，重新计算预约日期
+                    const doctorItem = doctors.find((d: any) => d.value === val);
+                    const doctorWeekdays = doctorItem?.extra
+                      ? String(doctorItem.extra).split(',').map((s: string) => s.trim()).filter(Boolean)
+                      : null;
+                    const weekdays = doctorWeekdays && doctorWeekdays.length > 0 ? doctorWeekdays : injectionWeekdays;
+
+                    // 重新计算 appointment_list 里每条的日期
+                    const currentList = form.getFieldValue('appointment_list') || [];
+                    if (currentList.length > 0) {
+                      const firstItem = currentList[0];
+                      const baseDate = firstItem?.appointment_date ? dayjs(firstItem.appointment_date) : dayjs();
+                      const firstDate = getNearestInjectionDate(baseDate, weekdays);
+                      const newList = currentList.map((item: any, idx: number) => {
+                        if (idx === 0) {
+                          return { ...item, appointment_date: firstDate, follow_up_date: firstDate };
+                        }
+                        const prev = currentList[idx - 1];
+                        const prevDate = idx === 1 ? firstDate : (prev?.appointment_date ? dayjs(prev.appointment_date) : firstDate);
+                        const base = getNextAppointmentDate(prevDate, item.injection_count, injectionIntervalFirst4);
+                        const d = getNearestInjectionDate(base, weekdays);
+                        return { ...item, appointment_date: d, follow_up_date: d };
+                      });
+                      form.setFieldsValue({ appointment_list: newList });
+                    }
+                  }}
                 />
               </Form.Item>
             </Col>
@@ -1119,15 +1180,20 @@ const Appointments: React.FC = () => {
                       <Button type="dashed" onClick={() => {
                         const currentList = form.getFieldValue('appointment_list') || [];
                         const lastItem = currentList[currentList.length - 1];
+
+                        // 优先用当前选中医生的波注日
+                        const selDoctor = form.getFieldValue('doctor');
+                        const selDoctorItem = selDoctor ? doctors.find((d: any) => d.value === selDoctor) : null;
+                        const selDoctorWeekdays = selDoctorItem?.extra
+                          ? String(selDoctorItem.extra).split(',').map((s: string) => s.trim()).filter(Boolean)
+                          : null;
+                        const effectiveWd = selDoctorWeekdays && selDoctorWeekdays.length > 0 ? selDoctorWeekdays : injectionWeekdays;
                         
                         if (lastItem) {
                           const lastInjectionCount = lastItem.injection_count || 0;
                           const nextInjectionCount = lastInjectionCount + 1;
-                          
-                          // 根据下一针的针次计算日期
                           const base = getNextAppointmentDate(dayjs(lastItem.appointment_date), nextInjectionCount, injectionIntervalFirst4);
-                          const nextDate = getNearestInjectionDate(base, injectionWeekdays);
-                          
+                          const nextDate = getNearestInjectionDate(base, effectiveWd);
                           add({
                             appointment_date: nextDate,
                             follow_up_date: nextDate,
@@ -1138,7 +1204,7 @@ const Appointments: React.FC = () => {
                           });
                         } else {
                           const base = dayjs();
-                          const nextDate = getNearestInjectionDate(base, injectionWeekdays);
+                          const nextDate = getNearestInjectionDate(base, effectiveWd);
                           add({
                             appointment_date: nextDate,
                             follow_up_date: nextDate,
@@ -1317,7 +1383,7 @@ const Appointments: React.FC = () => {
 
           <Row gutter={16}>
             <Col span={24}>
-              <Form.Item name="doctor" label="注药医生">
+              <Form.Item name="doctor" label="注药医生" style={{ display: 'none' }}>
                 <Select placeholder="选择医生" options={doctors} />
               </Form.Item>
             </Col>

@@ -21,45 +21,16 @@ const MainLayout: React.FC = () => {
   } = theme.useToken();
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useAuth();
+  const { logout, isAdmin } = useAuth();
 
   const items = [
-    {
-      key: '/app/dashboard',
-      icon: <DashboardOutlined />,
-      label: '工作台',
-    },
-    {
-      key: '/app/daily-work',
-      icon: <CheckSquareOutlined />,
-      label: '每日工作',
-    },
-    {
-      key: '/app/patients',
-      icon: <UserOutlined />,
-      label: '患者管理',
-    },
-    {
-      key: '/app/appointments',
-      icon: <CalendarOutlined />,
-      label: '预约管理',
-    },
-    {
-      key: '/app/print-center',
-      icon: <PrinterOutlined />,
-      label: '打印中心',
-    },
-    {
-      key: '/app/system-config',
-      icon: <SettingOutlined />,
-      label: '系统配置',
-    },
-    {
-      key: 'logout',
-      icon: <UserOutlined />,
-      label: '退出登录',
-      danger: true,
-    }
+    { key: '/app/dashboard', icon: <DashboardOutlined />, label: '工作台' },
+    { key: '/app/daily-work', icon: <CheckSquareOutlined />, label: '每日工作' },
+    { key: '/app/patients', icon: <UserOutlined />, label: '患者管理' },
+    { key: '/app/appointments', icon: <CalendarOutlined />, label: '预约管理' },
+    { key: '/app/print-center', icon: <PrinterOutlined />, label: '打印中心' },
+    ...(isAdmin ? [{ key: '/app/system-config', icon: <SettingOutlined />, label: '系统配置' }] : []),
+    { key: 'logout', icon: <UserOutlined />, label: '退出登录', danger: true },
   ];
 
   const handleMenuClick = (e: any) => {

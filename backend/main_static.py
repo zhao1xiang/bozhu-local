@@ -18,6 +18,7 @@ from routers.follow_ups import router as follow_ups_router
 from routers.dashboard import router as dashboard_router
 from routers.auth import router as auth_router
 from routers.embed import router as embed_router
+from routers.users import router as users_router
 from models.user import User
 from sqlmodel import Session, select
 from security import get_password_hash
@@ -77,12 +78,39 @@ async def lifespan(app: FastAPI):
     with Session(engine) as session:
         user = session.exec(select(User).where(User.username == "admin")).first()
         if not user:
-            admin_user = User(username="admin", hashed_password=get_password_hash("admin"), is_active=True)
+            admin_user = User(username="admin", hashed_password=get_password_hash("admin"), is_active=True, role="admin")
             session.add(admin_user)
             session.commit()
             logger.info("默认用户已创建 (admin/admin)")
         else:
+            # 确保 admin 有 role 字段
+            if not getattr(user, 'role', None):
+                user.role = 'admin'
+                session.add(user)
+                session.commit()
             logger.info("管理员用户已存在")
+
+    # 初始化4个病区账号
+    ward_accounts = [
+        ("userone",   "userone",   "ward", "1"),
+        ("usertwo",   "usertwo",   "ward", "2"),
+        ("userthree", "userthree", "ward", "3"),
+        ("userfour",  "userfour",  "ward", "4"),
+    ]
+    with Session(engine) as session:
+        for username, password, role, wards in ward_accounts:
+            existing = session.exec(select(User).where(User.username == username)).first()
+            if not existing:
+                u = User(
+                    username=username,
+                    hashed_password=get_password_hash(password),
+                    is_active=True,
+                    role=role,
+                    wards=wards,
+                )
+                session.add(u)
+                logger.info(f"  创建病区账号: {username} (病区: {wards})")
+        session.commit()
 
     # 初始化系统配置
     from models.system_setting import SystemSetting
@@ -90,13 +118,18 @@ async def lifespan(app: FastAPI):
         default_settings = [
             ('injection_interval_first_4', '30', '前4针注射间隔（天）'),
             ('print_phone_number', '', '打印页面显示的联系电话'),
-            ('embed_secret_key', 'bozhu_secret_2024', 'iframe嵌入接口签名密钥'),
+            ('embed_secret_key', 'f9A7xK2mQ8vZrP4sT1uWc6YhN3bD5eL0', 'iframe嵌入接口签名密钥'),
         ]
         for key, value, description in default_settings:
             setting = session.exec(select(SystemSetting).where(SystemSetting.key == key)).first()
             if not setting:
                 session.add(SystemSetting(key=key, value=value, description=description))
                 logger.info(f"  添加配置: {key} = {value}")
+            elif key == 'embed_secret_key' and setting.value == 'bozhu_secret_2024':
+                # 旧密钥升级为新密钥
+                setting.value = 'f9A7xK2mQ8vZrP4sT1uWc6YhN3bD5eL0'
+                session.add(setting)
+                logger.info(f"  更新配置: {key} -> 新密钥")
         session.commit()
 
     logger.info("系统启动完成")
@@ -130,6 +163,7 @@ app.include_router(follow_ups_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(embed_router, prefix="/api")
+app.include_router(users_router, prefix="/api")
 
 
 @app.get("/health")
@@ -149,11 +183,11 @@ if os.path.exists(frontend_dir):
     # 根目录静态文件（logo.png, print-template.png 等）
     @app.get("/{filename}")
     async def serve_root_static(filename: str):
-        static_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.txt']
+        static_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.txt', '.html']
         if any(filename.endswith(ext) for ext in static_extensions):
             file_path = os.path.join(frontend_dir, filename)
             if os.path.exists(file_path):
-                return FileResponse(file_path)
+                return FileResponse(file_path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
         return FileResponse(f"{frontend_dir}/index.html")
 
     @app.exception_handler(404)

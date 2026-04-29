@@ -1,18 +1,14 @@
-active_hospital: hospital1
+active_hospital: hospital3
 hospitals:
-  hospital1:
-    adapter: hospital1_adapter
+  hospital3:
+    adapter: hospital3_adapter
     his:
-      charset: utf8
-      db: BZ
-      host: 192.168.0.94
-      password: BZBC@2026
-      port: 1433
-      type: mssql
-      user: bz
-    name: 施尔明
-    view:
-      patient: getPatientInfo
+      type: webservice
+      url: http://192.0.19.141:1506/services/WSInterface?wsdl
+      call_operator: WF_YY
+      certificate: "bnjlQ7s0A2H2qk7M+XsT8GJ1TIreeK9O"
+      server_name: GetResiVisitRecord
+    name: 厦大附一
 sqlite:
   path: ../backend/database.db
 sync:
