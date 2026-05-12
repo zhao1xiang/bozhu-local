@@ -4,7 +4,7 @@ import {
   Form, Select, DatePicker, InputNumber, Button,
   Row, Col, message, Tag, Spin, Alert, Space, Tabs,
 } from 'antd';
-import { CheckCircleOutlined, PrinterOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, PrinterOutlined, CloseOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { apiClient } from '@/api/client';
 
@@ -75,6 +75,7 @@ const EmbedAppointmentPlain: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('bozhu');
   const [savedOk, setSavedOk] = useState(false);
   const [printPhoneNumber, setPrintPhoneNumber] = useState<string>('');
+  const [hasHistory, setHasHistory] = useState(false);
 
   const [bozhuAppts, setBozhuAppts] = useState<AppItem[]>([
     { injection_count: 1, is_new: false },
@@ -90,6 +91,11 @@ const EmbedAppointmentPlain: React.FC = () => {
   const [drugs, setDrugs] = useState<{label:string;value:string}[]>([]);
 
   useEffect(() => {
+    // 预加载打印模板和二维码图片
+    fetch(`/print-template.html?t=${Date.now()}`).catch(() => {});
+    const preloadImg = new Image();
+    preloadImg.src = '/qrcode.png';
+
     // 明文参数直接从 URL 读取，"无"视为空值
     const clean = (v: string | null) => (!v || v === '无' || v === 'null' || v === 'undefined') ? '' : v.trim();
     const name = clean(searchParams.get('name'));
@@ -165,10 +171,24 @@ const EmbedAppointmentPlain: React.FC = () => {
               follow_up_date: a.follow_up_date ? dayjs(a.follow_up_date) : undefined,
               is_new: false,
             }));
-          setBozhuAppts(bozhuList.length > 0 ? bozhuList : [
-            { injection_count: 1, is_new: false }, { injection_count: 2, is_new: false },
-            { injection_count: 3, is_new: false }, { injection_count: 4, is_new: false },
-          ]);
+
+          if (bozhuList.length > 0) {
+            setHasHistory(true);
+            const maxCount = Math.max(...bozhuList.map((a: any) => a.injection_count || 0));
+            const nextCount = maxCount + 1;
+            const lastAppt = bozhuList[bozhuList.length - 1];
+            const wdList = (wdRes.data?.value || '1').split(',').filter(Boolean);
+            const interval = parseInt(intRes.data?.value || '30');
+            const base = getNextDate(lastAppt.appointment_date ? dayjs(lastAppt.appointment_date) : dayjs(), nextCount, interval);
+            const nextDate = getNearestDate(base, wdList);
+            setBozhuAppts([{ injection_count: nextCount, appointment_date: nextDate, follow_up_date: nextDate,
+              treatment_phase: nextCount > 4 ? '巩固期' : '强化期', time_slot: '上午', condition_status: '稳定' }]);
+          } else {
+            setBozhuAppts([
+              { injection_count: 1, is_new: false }, { injection_count: 2, is_new: false },
+              { injection_count: 3, is_new: false }, { injection_count: 4, is_new: false },
+            ]);
+          }
 
           const periFound = appointments.find((a: any) => a.source === 'peri' || a.treatment_phase === '围手术期');
           if (periFound) {
@@ -188,8 +208,28 @@ const EmbedAppointmentPlain: React.FC = () => {
           // 没有已有预约，按系统逻辑自动生成
           const wdList = (wdRes.data?.value || '1').split(',').filter(Boolean);
           const interval = parseInt(intRes.data?.value || '30');
-          const generated = generateDates(wdList, interval);
-          setBozhuAppts(generated);
+          const startCount = (pd.injection_count || 0) + 1;
+          if (startCount > 1) {
+            if (startCount <= 4) {
+              const appts: AppItem[] = [];
+              let currentBase = dayjs();
+              for (let cnt = startCount; cnt <= 4; cnt++) {
+                const date = getNearestDate(currentBase, wdList);
+                appts.push({ injection_count: cnt, appointment_date: date, follow_up_date: date,
+                  treatment_phase: '强化期', time_slot: '上午', condition_status: '稳定' });
+                currentBase = getNextDate(date, cnt + 1, interval);
+              }
+              setBozhuAppts(appts);
+            } else {
+              const base = getNextDate(dayjs(), startCount, interval);
+              const nextDate = getNearestDate(base, wdList);
+              setBozhuAppts([{ injection_count: startCount, appointment_date: nextDate, follow_up_date: nextDate,
+                treatment_phase: '巩固期', time_slot: '上午', condition_status: '稳定' }]);
+            }
+          } else {
+            const generated = generateDates(wdList, interval);
+            setBozhuAppts(generated);
+          }
           const periDate = getNearestDate(dayjs(), wdList);
           setPeriAppt({ injection_count: 1, appointment_date: periDate, follow_up_date: periDate, treatment_phase: '围手术期', time_slot: '上午', condition_status: '稳定' });
         }
@@ -197,8 +237,28 @@ const EmbedAppointmentPlain: React.FC = () => {
         // 无法查询，按系统逻辑自动生成
         const wdList = (wdRes.data?.value || '1').split(',').filter(Boolean);
         const interval = parseInt(intRes.data?.value || '30');
-        const generated = generateDates(wdList, interval);
-        setBozhuAppts(generated);
+        const startCount = (pd.injection_count || 0) + 1;
+        if (startCount > 1) {
+          if (startCount <= 4) {
+            const appts: AppItem[] = [];
+            let currentBase = dayjs();
+            for (let cnt = startCount; cnt <= 4; cnt++) {
+              const date = getNearestDate(currentBase, wdList);
+              appts.push({ injection_count: cnt, appointment_date: date, follow_up_date: date,
+                treatment_phase: '强化期', time_slot: '上午', condition_status: '稳定' });
+              currentBase = getNextDate(date, cnt + 1, interval);
+            }
+            setBozhuAppts(appts);
+          } else {
+            const base = getNextDate(dayjs(), startCount, interval);
+            const nextDate = getNearestDate(base, wdList);
+            setBozhuAppts([{ injection_count: startCount, appointment_date: nextDate, follow_up_date: nextDate,
+              treatment_phase: '巩固期', time_slot: '上午', condition_status: '稳定' }]);
+          }
+        } else {
+          const generated = generateDates(wdList, interval);
+          setBozhuAppts(generated);
+        }
         const periDate = getNearestDate(dayjs(), wdList);
         setPeriAppt({ injection_count: 1, appointment_date: periDate, follow_up_date: periDate, treatment_phase: '围手术期', time_slot: '上午', condition_status: '稳定' });
       }
@@ -319,6 +379,7 @@ const EmbedAppointmentPlain: React.FC = () => {
         return (a.condition_status === '趋差' || a.condition_status === '不稳定') ? fmtDate(a.appointment_date) : '';
       };
       fetch(`/print-template.html?t=${Date.now()}`).then(r => r.text()).then(html => {
+        html = html.replace(/src="(?!http|data:)([^"]+)"/g, `src="${window.location.origin}/$1"`);
         html = html
           .replace('{{姓名}}', pd?.name || '')
           .replace('{{联系方式}}', pd?.phone || '')
@@ -340,48 +401,23 @@ const EmbedAppointmentPlain: React.FC = () => {
           .replace('{{第7次不稳定}}', getUnstable(7)).replace('{{第8次不稳定}}', getUnstable(8))
           .replace('{{第9次不稳定}}', getUnstable(9));
 
-        const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-        const styleMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
-        const bodyContent = bodyMatch ? bodyMatch[1] : html;
-        const rawStyles = styleMatch ? styleMatch.map((s: string) => s.replace(/<\/?style[^>]*>/gi, '')).join('\n') : '';
-
-        // 先清理可能残留的旧打印区域
-        document.getElementById('html-print-area')?.remove();
-        document.getElementById('html-print-style')?.remove();
-
-        const printDiv = document.createElement('div');
-        printDiv.id = 'html-print-area';
-        printDiv.innerHTML = bodyContent;
-        document.body.appendChild(printDiv);
-
-        const styleEl = document.createElement('style');
-        styleEl.id = 'html-print-style';
-        const scopedStyles = rawStyles.replace(/([^{}]+)\{/g, (match: string, selector: string) => {
-          const trimmed = selector.trim();
-          if (trimmed.startsWith('@') || trimmed.startsWith('from') || trimmed.startsWith('to')) return match;
-          const scoped = trimmed.split(',').map((s: string) => `#html-print-area ${s.trim()}`).join(', ');
-          return `${scoped} {`;
-        });
-        styleEl.textContent = `
-          ${scopedStyles}
-          #html-print-area {
-            position: fixed; left: 0; top: 0; width: 100%; height: 100%;
-            background: white; z-index: 99999; overflow: auto;
-            font-family: "SimSun","宋体",serif; font-size: 14px; color: #000;
-            padding: 8mm 10mm; box-sizing: border-box;
-          }
-          @media print {
-            @page { size: A4 portrait; margin: 8mm; }
-            body > *:not(#html-print-area):not(#html-print-style) { display: none !important; }
-            #html-print-area { position: static !important; width: 194mm !important; height: auto !important; overflow: visible !important; padding: 0 !important; z-index: auto !important; }
-          }
-        `;
-        document.head.appendChild(styleEl);
-        window.print();
-        setTimeout(() => {
-          document.getElementById('html-print-area')?.remove();
-          document.getElementById('html-print-style')?.remove();
-        }, 1000);
+        document.getElementById('html-print-iframe')?.remove();
+        const iframe = document.createElement('iframe');
+        iframe.id = 'html-print-iframe';
+        iframe.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;border:none;z-index:99999;background:white;';
+        document.body.appendChild(iframe);
+        iframe.onload = () => {
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          const imgs = iframeDoc ? Array.from(iframeDoc.querySelectorAll('img')) as HTMLImageElement[] : [];
+          Promise.all(imgs.map(img => new Promise<void>(resolve => {
+            if (img.complete && img.naturalWidth > 0) { resolve(); return; }
+            img.onload = () => resolve(); img.onerror = () => resolve();
+          }))).then(() => {
+            iframe.contentWindow?.print();
+            setTimeout(() => { document.getElementById('html-print-iframe')?.remove(); }, 1000);
+          });
+        };
+        iframe.srcdoc = html;
       }).catch(() => message.error('加载打印模板失败'));
       return;
     }
@@ -573,7 +609,7 @@ const EmbedAppointmentPlain: React.FC = () => {
                   value={patientData.doctor || ''} onChange={e => setPatientData(prev => ({ ...prev, doctor: e.target.value }))} />
               </Col>
               <Col span={6}>
-                <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>住院号</div>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>唯一识别号</div>
                 <input style={{ width: '100%', border: '1px solid #d9d9d9', borderRadius: 4, padding: '3px 8px', fontSize: 13 }}
                   value={patientData.outpatient_number || ''} onChange={e => setPatientData(prev => ({ ...prev, outpatient_number: e.target.value }))} />
               </Col>
@@ -595,7 +631,15 @@ const EmbedAppointmentPlain: React.FC = () => {
           <>
 
             {bozhuAppts.map((appt, idx) => (
-              <div key={idx} style={{ background: '#fafafa', borderRadius: 8, padding: '10px 16px', marginBottom: 8, border: '1px solid #e8e8e8' }}>
+              <div key={idx} style={{ background: '#fafafa', borderRadius: 8, padding: '10px 16px', marginBottom: 8, border: '1px solid #e8e8e8', position: 'relative' }}>
+                {!hasHistory && (appt.injection_count || 0) >= 4 && (
+                  <Button
+                      type="text"
+                      icon={<CloseOutlined style={{ fontSize: 14 }} />}
+                      onClick={() => setBozhuAppts(prev => prev.filter((_, i) => i !== idx))}
+                      style={{ position: 'absolute', top: 2, right: 2, color: '#ff4d4f', zIndex: 10, width: 32, height: 32 }}
+                  />
+                )}
                 <Row gutter={12} align="middle">
                   <Col span={2}>
                     <Tag color="blue">第{appt.injection_count}针</Tag>
@@ -662,6 +706,7 @@ const EmbedAppointmentPlain: React.FC = () => {
                 </Row>
               </div>
             ))}
+            {/* 添加按钮 */}
             <Button
               type="dashed"
               block
@@ -773,15 +818,27 @@ const EmbedAppointmentPlain: React.FC = () => {
         {/* 操作按钮 */}
         <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 12 }}>
           {activeTab === 'bozhu' ? (
-            <Button
-              size="large"
-              icon={<PrinterOutlined />}
-              loading={printSaving}
-              onClick={handleSaveAndPrint}
-              style={{ borderRadius: 8, height: 44, padding: '0 32px', borderColor: colors.blue, color: colors.blue }}
-            >
-              打印预约单
-            </Button>
+            <>
+              <Button
+                type="primary"
+                size="large"
+                icon={<CheckCircleOutlined />}
+                loading={saving}
+                onClick={handleSave}
+                style={{ borderRadius: 8, height: 44, padding: '0 32px' }}
+              >
+                确认预约
+              </Button>
+              <Button
+                size="large"
+                icon={<PrinterOutlined />}
+                loading={printSaving}
+                onClick={handleSaveAndPrint}
+                style={{ borderRadius: 8, height: 44, padding: '0 32px', borderColor: colors.blue, color: colors.blue }}
+              >
+                打印预约单
+              </Button>
+            </>
           ) : (
             <Button
               type="primary"

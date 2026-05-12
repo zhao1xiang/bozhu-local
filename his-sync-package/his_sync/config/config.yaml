@@ -1,0 +1,65 @@
+active_hospital: hospital5
+hospitals:
+  hospital1:
+    adapter: hospital1_adapter
+    his:
+      charset: cp936
+      db: master
+      host: 192.168.0.112
+      password: 123456
+      port: 1433
+      type: mssql
+      user: sa
+    name: 山东省眼科
+    view:
+      patient: VW_VEGF_PATIENT
+  hospital2:
+    adapter: hospital2_adapter
+    his:
+      charset: utf8
+      db: master
+      host: 192.168.0.112
+      password: 123456
+      port: 1433
+      type: mssql
+      user: sa
+    name: 施尔明
+    view:
+      patient: VW_PATIENT_TEST
+  hospital3:
+    adapter: hospital3_adapter
+    his:
+      type: webservice
+      url: http://192.0.19.141:1506/services/WSInterface?wsdl
+      call_operator: WF_YY
+      certificate: "bnjlQ7s0A2H2qk7M+XsT8GJ1TIreeK9O"
+      server_name: GetResiVisitRecord
+    name: 厦大附一
+  hospital4:
+    adapter: hospital4_adapter
+    his:
+      charset: utf8
+      db: portal_his
+      host: 10.1.1.20
+      password: Qdykyy2026.
+      port: 1433
+      type: mssql
+      user: BZYY
+    name: 山东第一医科大学附属青岛眼科医院
+    view:
+      patient: V_BZYY_INFO
+  hospital5:
+    adapter: hospital5_adapter
+    his:
+      type: cache
+      host: 10.60.0.40
+      port: 1972
+      namespace: dhc-app
+      user: ext_user
+      password: "Ext1108#2026@Zhuyao#"
+      procedure: web_WFYKYYJTT_Interface.view_zy_message
+    name: 潍坊眼科医院
+sqlite:
+  path: ../backend/database.db
+sync:
+  interval: 300

@@ -25,7 +25,6 @@ const PrintCenter: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(false);
   const [printPhoneNumber, setPrintPhoneNumber] = useState<string>('');
   const [previewHtml, setPreviewHtml] = useState<string>('');
 
@@ -43,7 +42,6 @@ const PrintCenter: React.FC = () => {
   };
 
   const fetchAppointments = async (patientId: string) => {
-    setLoading(true);
     try {
       const response = await apiClient.get<Appointment[]>('/appointments', {
         params: { patient_id: patientId, limit: 100 },
@@ -57,8 +55,6 @@ const PrintCenter: React.FC = () => {
       console.error(error);
       message.error('获取预约列表失败');
       setAppointments([]);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -132,7 +128,7 @@ const PrintCenter: React.FC = () => {
 
     // 预加载 HTML 里的所有图片，确保 iframe 渲染时图片已缓存
     const imgMatches = html.match(/src="(https?:\/\/[^"]+)"/g) || [];
-    await Promise.all(imgMatches.map(m => {
+    await Promise.all(imgMatches.map((m: string) => {
       const url = m.replace(/^src="/, '').replace(/"$/, '');
       return new Promise<void>(resolve => {
         const img = new Image();
@@ -193,11 +189,21 @@ const PrintCenter: React.FC = () => {
       }
     `;
     document.head.appendChild(styleEl);
-    window.print();
-    setTimeout(() => {
-      document.getElementById('html-print-area')?.remove();
-      document.getElementById('html-print-style')?.remove();
-    }, 1000);
+
+    // 等待所有图片加载完成后再打印
+    const imgs = Array.from(printDiv.querySelectorAll('img')) as HTMLImageElement[];
+    const waitAll = imgs.map(img => new Promise<void>(resolve => {
+      if (img.complete && img.naturalWidth > 0) { resolve(); return; }
+      img.onload = () => resolve();
+      img.onerror = () => resolve();
+    }));
+    Promise.all(waitAll).then(() => {
+      window.print();
+      setTimeout(() => {
+        document.getElementById('html-print-area')?.remove();
+        document.getElementById('html-print-style')?.remove();
+      }, 1000);
+    });
   };
 
   const handlePrint = async () => {
@@ -246,7 +252,6 @@ const PrintCenter: React.FC = () => {
               showSearch
               style={{ width: 280 }}
               placeholder="请选择患者"
-              optionFilterProp="children"
               filterOption={(input, option) =>
                 (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
               }

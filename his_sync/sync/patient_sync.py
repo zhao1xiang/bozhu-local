@@ -78,7 +78,7 @@ def get_db_connections():
         his_cursor = his_conn_obj.cursor()
         local_cursor = local_conn_obj.cursor()
         
-        yield his_cursor, local_cursor, local_conn_obj, hospital_config
+        yield his_cursor, local_cursor, local_conn_obj, hospital_config, his_conn_obj
         
     except Exception as e:
         logger.error(f"数据库连接错误: {e}")
@@ -255,7 +255,7 @@ def sync_patient():
         
         logger.info("开始患者数据同步")
         
-        with get_db_connections() as (his_cursor, local_cursor, local_conn, hospital_config):
+        with get_db_connections() as (his_cursor, local_cursor, local_conn, hospital_config, his_conn):
             hospital_name = hospital_config["name"]
             hospital_id = hospital_config["id"]
             his_type = hospital_config.get("his", {}).get("type", "mssql")
@@ -302,7 +302,7 @@ def sync_patient():
             # 处理每条记录
             for i, row in enumerate(rows, 1):
                 try:
-                    patient_data = convert_patient(row)
+                    patient_data = convert_patient(row, his_conn)
                     if patient_data is None:
                         # 适配器返回 None 表示跳过此记录
                         continue

@@ -4,7 +4,7 @@ import {
   Select, DatePicker, InputNumber, Button,
   Row, Col, message, Spin, Alert, Tabs,
 } from 'antd';
-import { CheckCircleOutlined, PrinterOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, PrinterOutlined, CloseOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { apiClient } from '@/api/client';
 
@@ -72,6 +72,7 @@ const EmbedAppointment: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('bozhu');
   const [savedOk, setSavedOk] = useState(false);
   const [printPhoneNumber, setPrintPhoneNumber] = useState<string>('');
+  const [hasHistory, setHasHistory] = useState(false);
   const [successPage, setSuccessPage] = useState<'save' | 'print' | null>(null);
 
   const [bozhuAppts, setBozhuAppts] = useState<AppItem[]>([
@@ -95,6 +96,10 @@ const EmbedAppointment: React.FC = () => {
       setLoading(false);
       return;
     }
+    // 预加载打印模板和二维码图片，确保打印时已缓存
+    fetch(`/print-template.html?t=${Date.now()}`).catch(() => {});
+    const preloadImg = new Image();
+    preloadImg.src = '/qrcode.png';
     verifyAndLoad(dataParam, signParam);
   }, []);
 
@@ -153,7 +158,30 @@ const EmbedAppointment: React.FC = () => {
             appointment_date: a.appointment_date ? dayjs(a.appointment_date) : null,
             follow_up_date: a.follow_up_date ? dayjs(a.follow_up_date) : null,
           }));
-        setBozhuAppts(bozhuList.length > 0 ? bozhuList : [{ injection_count: 1 }, { injection_count: 2 }, { injection_count: 3 }, { injection_count: 4 }]);
+
+        if (bozhuList.length > 0) {
+          // 有历史记录：只显示下一针（最大针次 + 1）
+          setHasHistory(true);
+          const maxCount = Math.max(...bozhuList.map((a: any) => a.injection_count || 0));
+          const nextCount = maxCount + 1;
+          const lastAppt = bozhuList[bozhuList.length - 1];
+          const base = getNextAppointmentDate(
+            lastAppt.appointment_date ? dayjs(lastAppt.appointment_date) : dayjs(),
+            nextCount,
+            interval
+          );
+          const nextDate = getNearestInjectionDate(base, wd);
+          setBozhuAppts([{
+            injection_count: nextCount,
+            appointment_date: nextDate,
+            follow_up_date: nextDate,
+            treatment_phase: nextCount > 4 ? '巩固期' : '强化期',
+            time_slot: '上午',
+            condition_status: '稳定',
+          }]);
+        } else {
+          setBozhuAppts([{ injection_count: 1 }, { injection_count: 2 }, { injection_count: 3 }, { injection_count: 4 }]);
+        }
 
         // 填充围手术期
         const periFound = appointments.find((a: any) => a.treatment_phase === '围手术期');
@@ -177,8 +205,43 @@ const EmbedAppointment: React.FC = () => {
         }
       } else {
         // 没有已有预约，按系统逻辑自动生成4次玻注预约
-        const generated = generateDates(wd, interval);
-        setBozhuAppts(generated);
+        const startCount = (pd.injection_count || 0) + 1;
+        if (startCount > 1) {
+          // 传入了 injection_count，从下一针开始生成
+          if (startCount <= 4) {
+            // 强化期内：生成从 startCount 到第4针的多条预约
+            const appts: AppItem[] = [];
+            let currentBase = dayjs();
+            for (let cnt = startCount; cnt <= 4; cnt++) {
+              const date = getNearestInjectionDate(currentBase, wd);
+              appts.push({
+                injection_count: cnt,
+                appointment_date: date,
+                follow_up_date: date,
+                treatment_phase: '强化期',
+                time_slot: '上午',
+                condition_status: '稳定',
+              });
+              currentBase = getNextAppointmentDate(date, cnt + 1, interval);
+            }
+            setBozhuAppts(appts);
+          } else {
+            // 强化期后：只生成下一针
+            const base = getNextAppointmentDate(dayjs(), startCount, interval);
+            const nextDate = getNearestInjectionDate(base, wd);
+            setBozhuAppts([{
+              injection_count: startCount,
+              appointment_date: nextDate,
+              follow_up_date: nextDate,
+              treatment_phase: '巩固期',
+              time_slot: '上午',
+              condition_status: '稳定',
+            }]);
+          }
+        } else {
+          const generated = generateDates(wd, interval);
+          setBozhuAppts(generated);
+        }
         // 围手术期默认找最近玻注日
         const periDate = getNearestInjectionDate(dayjs(), wd);
         setPeriAppt({
@@ -308,7 +371,7 @@ const EmbedAppointment: React.FC = () => {
     }
   };
 
-  const renderAndPrint = (patient: any, appts: any[]) => {
+  const renderAndPrint = (patient: any, appts: any[], onDone?: () => void) => {
     // ============================================================
     // 切换打印模式：true = HTML模板，false = 图片覆盖文字
     // ============================================================
@@ -331,6 +394,8 @@ const EmbedAppointment: React.FC = () => {
         return (a.condition_status === '趋差' || a.condition_status === '不稳定') ? fmtDate(a.appointment_date) : '';
       };
       fetch(`/print-template.html?t=${Date.now()}`).then(r => r.text()).then(html => {
+        // 把相对路径图片替换为绝对 URL，解决打印时无法加载相对路径的问题
+        html = html.replace(/src="(?!http|data:)([^"]+)"/g, `src="${window.location.origin}/$1"`);
         html = html
           .replace('{{姓名}}', pd?.name || '')
           .replace('{{联系方式}}', pd?.phone || '')
@@ -352,48 +417,27 @@ const EmbedAppointment: React.FC = () => {
           .replace('{{第7次不稳定}}', getUnstable(7)).replace('{{第8次不稳定}}', getUnstable(8))
           .replace('{{第9次不稳定}}', getUnstable(9));
 
-        const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-        const styleMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
-        const bodyContent = bodyMatch ? bodyMatch[1] : html;
-        const rawStyles = styleMatch ? styleMatch.map((s: string) => s.replace(/<\/?style[^>]*>/gi, '')).join('\n') : '';
-
-        // 先清理可能残留的旧打印区域
-        document.getElementById('html-print-area')?.remove();
-        document.getElementById('html-print-style')?.remove();
-
-        const printDiv = document.createElement('div');
-        printDiv.id = 'html-print-area';
-        printDiv.innerHTML = bodyContent;
-        document.body.appendChild(printDiv);
-
-        const styleEl = document.createElement('style');
-        styleEl.id = 'html-print-style';
-        const scopedStyles = rawStyles.replace(/([^{}]+)\{/g, (match: string, selector: string) => {
-          const trimmed = selector.trim();
-          if (trimmed.startsWith('@') || trimmed.startsWith('from') || trimmed.startsWith('to')) return match;
-          const scoped = trimmed.split(',').map((s: string) => `#html-print-area ${s.trim()}`).join(', ');
-          return `${scoped} {`;
-        });
-        styleEl.textContent = `
-          ${scopedStyles}
-          #html-print-area {
-            position: fixed; left: 0; top: 0; width: 100%; height: 100%;
-            background: white; z-index: 99999; overflow: auto;
-            font-family: "SimSun","宋体",serif; font-size: 14px; color: #000;
-            padding: 8mm 10mm; box-sizing: border-box;
-          }
-          @media print {
-            @page { size: A4 portrait; margin: 8mm; }
-            body > *:not(#html-print-area):not(#html-print-style) { display: none !important; }
-            #html-print-area { position: static !important; width: 194mm !important; height: auto !important; overflow: visible !important; padding: 0 !important; z-index: auto !important; }
-          }
-        `;
-        document.head.appendChild(styleEl);
-        window.print();
-        setTimeout(() => {
-          document.getElementById('html-print-area')?.remove();
-          document.getElementById('html-print-style')?.remove();
-        }, 1000);
+        // 用 iframe 加载完整 HTML，等 onload 后打印，确保图片渲染完成
+        document.getElementById('html-print-iframe')?.remove();
+        const iframe = document.createElement('iframe');
+        iframe.id = 'html-print-iframe';
+        iframe.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;border:none;z-index:99999;background:white;';
+        document.body.appendChild(iframe);
+        iframe.onload = () => {
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          const imgs = iframeDoc ? Array.from(iframeDoc.querySelectorAll('img')) as HTMLImageElement[] : [];
+          const waitAll = imgs.map(img => new Promise<void>(resolve => {
+            if (img.complete && img.naturalWidth > 0) { resolve(); return; }
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+          }));
+          Promise.all(waitAll).then(() => {
+            iframe.contentWindow?.print();
+            onDone?.();
+            setTimeout(() => { document.getElementById('html-print-iframe')?.remove(); }, 1000);
+          });
+        };
+        iframe.srcdoc = html;
       }).catch(() => message.error('加载打印模板失败'));
       return;
     }
@@ -601,7 +645,17 @@ const EmbedAppointment: React.FC = () => {
         {activeTab === 'bozhu' && (
           <>
             {bozhuAppts.map((appt, idx) => (
-              <div key={idx} style={{ background: '#fafafa', borderRadius: 8, padding: '10px 16px', marginBottom: 8, border: '1px solid #e8e8e8' }}>
+              <div key={idx} style={{ background: '#fafafa', borderRadius: 8, padding: '10px 16px', marginBottom: 8, border: '1px solid #e8e8e8', position: 'relative' }}>
+                {/* 右上角删除按钮：1-3针不可删，第4针起可删，有历史时不可删 */}
+                {!hasHistory && (appt.injection_count || 0) >= 4 && (
+                 <Button
+                  type="text"
+                  icon={<CloseOutlined style={{ fontSize: 14 }} />}
+                  onClick={() => setBozhuAppts(prev => prev.filter((_, i) => i !== idx))}
+                  style={{ position: 'absolute', top: 2, right: 2, color: '#ff4d4f', zIndex: 10, width: 32, height: 32 }}
+                />
+
+                )}
                 <Row gutter={12} align="middle">
                   <Col span={2}>
                     <span style={{ color: colors.blue, fontWeight: 'bold', fontSize: 13 }}>第{appt.injection_count}针</span>
@@ -645,7 +699,7 @@ const EmbedAppointment: React.FC = () => {
                       options={[{ label: '稳定', value: '稳定' }, { label: '不稳定', value: '不稳定' }]}
                     />
                   </Col>
-                  <Col span={5}>
+                  <Col span={4}>
                     <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>阶段</div>
                     <Select
                       size="small"
@@ -658,6 +712,7 @@ const EmbedAppointment: React.FC = () => {
                 </Row>
               </div>
             ))}
+            {/* 添加按钮 */}
             <Button
               type="dashed"
               block
@@ -757,15 +812,27 @@ const EmbedAppointment: React.FC = () => {
 
         <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 12 }}>
           {activeTab === 'bozhu' ? (
-            <Button
-              size="large"
-              icon={<PrinterOutlined />}
-              loading={printSaving}
-              onClick={handleSaveAndPrint}
-              style={{ borderRadius: 8, height: 44, padding: '0 32px', borderColor: colors.blue, color: colors.blue }}
-            >
-              打印预约单
-            </Button>
+            <>
+              <Button
+                type="primary"
+                size="large"
+                icon={<CheckCircleOutlined />}
+                loading={saving}
+                onClick={handleSave}
+                style={{ borderRadius: 8, height: 44, padding: '0 32px' }}
+              >
+                确认预约
+              </Button>
+              <Button
+                size="large"
+                icon={<PrinterOutlined />}
+                loading={printSaving}
+                onClick={handleSaveAndPrint}
+                style={{ borderRadius: 8, height: 44, padding: '0 32px', borderColor: colors.blue, color: colors.blue }}
+              >
+                打印预约单
+              </Button>
+            </>
           ) : (
             <Button
               type="primary"

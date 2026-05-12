@@ -544,6 +544,11 @@ const Patients: React.FC = () => {
       key: 'outpatient_number',
     },
     {
+      title: '就诊卡号',
+      dataIndex: 'medical_card_number',
+      key: 'medical_card_number',
+    },
+    {
       title: '电话',
       dataIndex: 'phone',
       key: 'phone',
