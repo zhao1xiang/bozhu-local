@@ -12,7 +12,6 @@ a = Analysis(
     datas=[
         ('database.db', '.'),
         ('main.py', '.'),
-        ('main_static.py', '.'),
         ('database.py', '.'),
         ('security.py', '.'),
         ('models', 'models'),

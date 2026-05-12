@@ -10,8 +10,7 @@ a = Analysis(
         # 包含所有必要的数据文件
         ('database.db', '.'),
         ('../frontend/dist', 'frontend'),  # 前端构建文件
-        ('main_web.py', '.'),  # Web版本的主应用文件
-        ('main.py', '.'),      # 原始主应用文件
+        ('main.py', '.'),      # 主应用文件
         ('database.py', '.'),
         ('security.py', '.'),
         ('models', 'models'),
