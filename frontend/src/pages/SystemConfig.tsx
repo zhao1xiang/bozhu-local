@@ -134,7 +134,7 @@ const DictionaryTable: React.FC<{ category: string, title: string }> = ({ catego
         }
       },
       {
-        title: '病区',
+        title: '分组',
         dataIndex: 'ward',
         key: 'ward',
         render: (ward: string) => ward || <span style={{ color: '#999' }}>-</span>,
@@ -212,7 +212,7 @@ const DictionaryTable: React.FC<{ category: string, title: string }> = ({ catego
                   ]}
                 />
               </Form.Item>
-              <Form.Item name="ward" label="病区" extra="该医生所属病区，多个病区用逗号分隔，如 1,2">
+              <Form.Item name="ward" label="分组" extra="该医生所属分组，多个分组用逗号分隔，如 1,2">
                 <Input placeholder="例如：1 或 1,2" />
               </Form.Item>
             </>
@@ -413,7 +413,7 @@ const ChangePassword: React.FC = () => {
 };
 
 // ===== 账号管理组件 =====
-interface UserItem { id: number; username: string; is_active: boolean; role: string; wards?: string; }
+interface UserItem { id: number; username: string; is_active: boolean; role: string; doctor?: string; wards?: string; }
 
 const AccountManagement: React.FC = () => {
   const [users, setUsers] = React.useState<UserItem[]>([]);
@@ -421,6 +421,7 @@ const AccountManagement: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [editingUser, setEditingUser] = React.useState<UserItem | null>(null);
   const [form] = Form.useForm();
+  const [doctors, setDoctors] = React.useState<{label: string; value: string}[]>([]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -431,12 +432,25 @@ const AccountManagement: React.FC = () => {
     finally { setLoading(false); }
   };
 
-  React.useEffect(() => { fetchUsers(); }, []);
+  const fetchDoctors = async () => {
+    try {
+      const res = await apiClient.get('/data-dictionary', { params: { category: 'doctor' } });
+      const doctorList = (res.data || [])
+        .filter((d: any) => d.is_active)
+        .map((d: any) => ({ label: d.label, value: d.value }));
+      setDoctors(doctorList);
+    } catch { message.error('获取医生列表失败'); }
+  };
+
+  React.useEffect(() => { 
+    fetchUsers();
+    fetchDoctors();
+  }, []);
 
   const handleAddUser = () => {
     setEditingUser(null);
     form.resetFields();
-    form.setFieldsValue({ role: 'ward', is_active: true });
+    form.setFieldsValue({ role: 'doctor', is_active: true });
     setIsModalOpen(true);
   };
 
@@ -458,7 +472,12 @@ const AccountManagement: React.FC = () => {
     try {
       const values = await form.validateFields();
       if (editingUser) {
-        const payload: any = { role: values.role, wards: values.wards, is_active: values.is_active };
+        const payload: any = { 
+          role: values.role, 
+          doctor: values.doctor || null, 
+          wards: values.wards || null,
+          is_active: values.is_active 
+        };
         if (values.password) payload.password = values.password;
         await apiClient.put(`/users/${editingUser.id}`, payload);
         message.success('更新成功');
@@ -473,8 +492,9 @@ const AccountManagement: React.FC = () => {
 
   const userColumns = [
     { title: '用户名', dataIndex: 'username', key: 'username' },
-    { title: '角色', dataIndex: 'role', key: 'role', render: (r: string) => r === 'admin' ? '管理员' : '病区账号' },
-    { title: '可管理病区', dataIndex: 'wards', key: 'wards', render: (w: string) => w || '-' },
+    { title: '角色', dataIndex: 'role', key: 'role', render: (r: string) => r === 'admin' ? '管理员' : '医生账号' },
+    { title: '绑定医生', dataIndex: 'doctor', key: 'doctor', render: (d: string) => d || <span style={{ color: '#999' }}>未绑定</span> },
+    { title: '分组', dataIndex: 'wards', key: 'wards', render: (w: string) => w || <span style={{ color: '#999' }}>未配置</span> },
     { title: '状态', dataIndex: 'is_active', key: 'is_active', render: (v: boolean) => <Switch checked={v} disabled /> },
     {
       title: '操作', key: 'action',
@@ -504,10 +524,19 @@ const AccountManagement: React.FC = () => {
             <Input.Password />
           </Form.Item>
           <Form.Item name="role" label="角色">
-            <Select options={[{ label: '管理员', value: 'admin' }, { label: '病区账号', value: 'ward' }]} />
+            <Select options={[{ label: '管理员', value: 'admin' }, { label: '医生账号', value: 'doctor' }]} />
           </Form.Item>
-          <Form.Item name="wards" label="可管理病区" extra="多个病区用逗号分隔，如 1,2；管理员留空表示全部">
-            <Input placeholder="例如：1 或 1,2" />
+          <Form.Item name="doctor" label="绑定医生" extra="选择该账号绑定的医生">
+            <Select 
+              placeholder="请选择医生"
+              allowClear
+              showSearch
+              options={doctors}
+              filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+            />
+          </Form.Item>
+          <Form.Item name="wards" label="分组" extra="填入分组编号，多个分组用逗号分隔（例如：1,2,3）；配置后该账号可看到这些分组内的所有患者">
+            <Input placeholder="例如：1,2,3" />
           </Form.Item>
           <Form.Item name="is_active" label="启用" valuePropName="checked"><Switch /></Form.Item>
         </Form>
@@ -525,7 +554,7 @@ const SystemConfig: React.FC = () => {
         { key: 'drug', label: '药品管理', children: <DictionaryTable category="drug" title="药品" /> },
         { key: 'diagnosis', label: '疾病诊断管理', children: <DictionaryTable category="diagnosis" title="疾病诊断" /> },
         { key: 'general', label: '通用设置', children: <GeneralSettings /> },
-        // { key: 'accounts', label: '账号管理', children: <AccountManagement /> },
+        { key: 'accounts', label: '账号管理', children: <AccountManagement /> },
         { key: 'security', label: '安全设置', children: <ChangePassword /> },
       ]} />
     </Card>

@@ -613,6 +613,59 @@ const EmbedAppointmentPlain: React.FC = () => {
                 <input style={{ width: '100%', border: '1px solid #d9d9d9', borderRadius: 4, padding: '3px 8px', fontSize: 13 }}
                   value={patientData.outpatient_number || ''} onChange={e => setPatientData(prev => ({ ...prev, outpatient_number: e.target.value }))} />
               </Col>
+              <Col span={6}>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>已完成针数</div>
+                <InputNumber 
+                  style={{ width: '100%' }}
+                  min={0}
+                  value={patientData.injection_count || 0}
+                  onChange={v => {
+                    const oldCount = patientData.injection_count || 0;
+                    const newCount = v || 0;
+                    setPatientData(prev => ({ ...prev, injection_count: newCount }));
+                    
+                    // 如果针数改变，重新生成预约
+                    if (newCount !== oldCount) {
+                      const startCount = newCount + 1;
+                      if (startCount > 1) {
+                        if (startCount <= 4) {
+                          const appts: AppItem[] = [];
+                          let currentBase = dayjs();
+                          for (let cnt = startCount; cnt <= 4; cnt++) {
+                            const date = getNearestDate(currentBase, injectionWeekdays);
+                            appts.push({
+                              injection_count: cnt,
+                              appointment_date: date,
+                              follow_up_date: date,
+                              treatment_phase: '强化期',
+                              time_slot: '上午',
+                              condition_status: '稳定',
+                              is_new: true,
+                            });
+                            currentBase = getNextDate(date, cnt + 1, injectionIntervalFirst4);
+                          }
+                          setBozhuAppts(appts);
+                        } else {
+                          const base = getNextDate(dayjs(), startCount, injectionIntervalFirst4);
+                          const nextDate = getNearestDate(base, injectionWeekdays);
+                          setBozhuAppts([{
+                            injection_count: startCount,
+                            appointment_date: nextDate,
+                            follow_up_date: nextDate,
+                            treatment_phase: '巩固期',
+                            time_slot: '上午',
+                            condition_status: '稳定',
+                            is_new: true,
+                          }]);
+                        }
+                      } else {
+                        const generated = generateDates(injectionWeekdays, injectionIntervalFirst4);
+                        setBozhuAppts(generated);
+                      }
+                    }
+                  }}
+                />
+              </Col>
             </Row>
           </div>
         )}
@@ -632,7 +685,7 @@ const EmbedAppointmentPlain: React.FC = () => {
 
             {bozhuAppts.map((appt, idx) => (
               <div key={idx} style={{ background: '#fafafa', borderRadius: 8, padding: '10px 16px', marginBottom: 8, border: '1px solid #e8e8e8', position: 'relative' }}>
-                {!hasHistory && (appt.injection_count || 0) >= 4 && (
+                {!hasHistory && (appt.injection_count || 0) >= 3 && (
                   <Button
                       type="text"
                       icon={<CloseOutlined style={{ fontSize: 14 }} />}

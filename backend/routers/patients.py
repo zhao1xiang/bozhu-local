@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session, select
 from database import engine
 from models import Patient, PatientBase
-from models.data_dictionary import DataDictionary
 from models.user import User
+from models.data_dictionary import DataDictionary
 from typing import List, Optional
 from jose import jwt
 from security import SECRET_KEY, ALGORITHM
@@ -29,28 +29,6 @@ def get_optional_user(request: Request, session: Session = Depends(get_session))
         return session.exec(select(User).where(User.username == username)).first()
     except Exception:
         return None
-
-
-def get_ward_doctor_values(wards: str, session: Session) -> Optional[List[str]]:
-    """根据病区列表获取对应的医生 value 列表
-    返回 None 表示不过滤（admin），返回列表（可能为空）表示按病区过滤
-    """
-    if not wards:
-        return None
-    ward_list = [w.strip() for w in wards.split(',') if w.strip()]
-    if not ward_list:
-        return None
-    try:
-        doctors = session.exec(
-            select(DataDictionary).where(
-                DataDictionary.category == 'doctor',
-                DataDictionary.is_active == True,
-            )
-        ).all()
-        # 返回属于该病区的医生列表（可能为空，表示该病区没有配置医生）
-        return [d.value for d in doctors if getattr(d, 'ward', None) and any(w in str(d.ward).split(',') for w in ward_list)]
-    except Exception:
-        return []
 
 @router.post("/", response_model=Patient)
 def create_patient(patient: PatientBase, session: Session = Depends(get_session)):
@@ -91,35 +69,62 @@ def read_patients(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     try:
-        from models import Appointment
         q = select(Patient).where(Patient.is_deleted == False)
         if outpatient_number:
             q = q.where(Patient.outpatient_number == outpatient_number)
 
-        # 病区过滤：ward 账号只能看自己病区医生的患者
+        # 权限控制逻辑：
+        # 1. 如果医生配置了分组（user.wards 不为空），查询该分组内所有医生的患者
+        # 2. 如果医生没有配置分组，按医生名字查询（原逻辑）
         role = getattr(current_user, 'role', 'admin')
-        wards = getattr(current_user, 'wards', None)
-        if role != 'admin' and wards:
-            doctor_values = get_ward_doctor_values(wards, session)
-            if doctor_values is not None:
-                # 找出有注药医生的患者（取最新预约的医生）
-                # 策略：患者的最新预约的 doctor 在病区医生列表里，或者患者没有任何预约（无病区，所有人可见）
-                all_patients = session.exec(q.order_by(Patient.created_at.desc()).offset(skip).limit(limit)).all()
-                filtered = []
-                for p in all_patients:
-                    latest_appt = session.exec(
-                        select(Appointment).where(
-                            Appointment.patient_id == p.id,
-                            Appointment.is_deleted == False,
-                            Appointment.doctor != None,
-                        ).order_by(Appointment.created_at.desc())
-                    ).first()
-                    if latest_appt is None:
-                        # 没有注药医生，所有病区可见
-                        filtered.append(p)
-                    elif latest_appt.doctor in doctor_values:
-                        filtered.append(p)
-                return filtered
+        bound_doctor = getattr(current_user, 'doctor', None)
+        user_wards = getattr(current_user, 'wards', None)
+
+        if role != 'admin':
+            from sqlmodel import or_
+            
+            # 如果医生配置了分组，查询该分组内所有医生的患者
+            if user_wards:
+                # user_wards 格式: "1,2,3" (分组编号列表)
+                # 需要查找医生表中 ward 字段包含这些分组编号的医生
+                
+                ward_list = [w.strip() for w in user_wards.split(',') if w.strip()]
+                if ward_list:
+                    # 查找所有分组包含这些编号的医生
+                    doctors_in_wards = session.exec(
+                        select(DataDictionary).where(
+                            DataDictionary.category == 'doctor',
+                            DataDictionary.is_active == True
+                        )
+                    ).all()
+                    
+                    # 过滤出分组包含指定编号的医生
+                    matching_doctors = []
+                    for doc in doctors_in_wards:
+                        doc_wards = [w.strip() for w in (doc.ward or '').split(',') if w.strip()]
+                        if any(w in ward_list for w in doc_wards):
+                            matching_doctors.append(doc.value)
+                    
+                    if matching_doctors:
+                        q = q.where(Patient.doctor.in_(matching_doctors))
+                    else:
+                        # 分组内没有医生，返回空结果
+                        q = q.where(Patient.doctor == None)
+                else:
+                    # 分组为空，返回空结果
+                    q = q.where(Patient.doctor == None)
+            # 如果医生没有配置分组，按医生名字查询
+            elif bound_doctor:
+                q = q.where(
+                    or_(
+                        Patient.doctor == None,
+                        Patient.doctor == '',
+                        Patient.doctor == bound_doctor,
+                    )
+                )
+            else:
+                # 既没有分组也没有绑定医生，返回空结果
+                q = q.where(Patient.doctor == None)
 
         patients = session.exec(q.order_by(Patient.created_at.desc()).offset(skip).limit(limit)).all()
         return patients

@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session, select
 from database import engine
 from models import Appointment, AppointmentBase
-from models.data_dictionary import DataDictionary
 from models.user import User
+from models.data_dictionary import DataDictionary
 from typing import List, Optional
 from datetime import date
 import logging
@@ -32,24 +32,6 @@ def get_optional_user(request: Request, session: Session = Depends(get_session))
         return session.exec(select(User).where(User.username == username)).first()
     except Exception:
         return None
-
-
-def get_ward_doctor_values(wards: str, session: Session) -> Optional[List[str]]:
-    if not wards:
-        return None
-    ward_list = [w.strip() for w in wards.split(',') if w.strip()]
-    if not ward_list:
-        return None
-    try:
-        doctors = session.exec(
-            select(DataDictionary).where(
-                DataDictionary.category == 'doctor',
-                DataDictionary.is_active == True,
-            )
-        ).all()
-        return [d.value for d in doctors if getattr(d, 'ward', None) and any(w in str(d.ward).split(',') for w in ward_list)]
-    except Exception:
-        return []
 
 @router.post("/", response_model=Appointment)
 def create_appointment(appointment: AppointmentBase, session: Session = Depends(get_session)):
@@ -136,21 +118,62 @@ def read_appointments(
         if doctor:
             query = query.where(Appointment.doctor.contains(doctor))
 
-        # 病区过滤
+        # 医生账号过滤：只看自己名下的预约（doctor 为空的预约所有人可见）
         role = getattr(current_user, 'role', 'admin')
-        wards = getattr(current_user, 'wards', None)
-        if role != 'admin' and wards and not patient_id:
-            doctor_values = get_ward_doctor_values(wards, session)
-            if doctor_values is not None:
-                # 有注药医生的预约按病区过滤，没有注药医生的预约所有人可见
-                from sqlmodel import or_
+        bound_doctor = getattr(current_user, 'doctor', None)
+        user_wards = getattr(current_user, 'wards', None)
+        
+        if role != 'admin' and not patient_id:
+            from sqlmodel import or_
+            
+            # 如果医生配置了分组，查询该分组内所有医生的预约
+            if user_wards:
+                # user_wards 格式: "1,2,3" (分组编号列表)
+                # 需要查找医生表中 ward 字段包含这些分组编号的医生
+                
+                ward_list = [w.strip() for w in user_wards.split(',') if w.strip()]
+                if ward_list:
+                    # 查找所有分组包含这些编号的医生
+                    doctors_in_wards = session.exec(
+                        select(DataDictionary).where(
+                            DataDictionary.category == 'doctor',
+                            DataDictionary.is_active == True
+                        )
+                    ).all()
+                    
+                    # 过滤出分组包含指定编号的医生
+                    matching_doctors = []
+                    for doc in doctors_in_wards:
+                        doc_wards = [w.strip() for w in (doc.ward or '').split(',') if w.strip()]
+                        if any(w in ward_list for w in doc_wards):
+                            matching_doctors.append(doc.value)
+                    
+                    if matching_doctors:
+                        query = query.where(
+                            or_(
+                                Appointment.doctor == None,
+                                Appointment.doctor == '',
+                                Appointment.doctor.in_(matching_doctors),
+                            )
+                        )
+                    else:
+                        # 分组内没有医生，返回空结果
+                        query = query.where(Appointment.doctor == None)
+                else:
+                    # 分组为空，返回空结果
+                    query = query.where(Appointment.doctor == None)
+            # 如果医生没有配置分组，按医生名字查询
+            elif bound_doctor:
                 query = query.where(
                     or_(
                         Appointment.doctor == None,
                         Appointment.doctor == '',
-                        Appointment.doctor.in_(doctor_values),
+                        Appointment.doctor == bound_doctor,
                     )
                 )
+            else:
+                # 既没有分组也没有绑定医生，返回空结果
+                query = query.where(Appointment.doctor == None)
 
         query = query.order_by(Appointment.created_at.desc(), Appointment.appointment_date.asc())
         query = query.offset(skip).limit(limit)
