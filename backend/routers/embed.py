@@ -265,6 +265,7 @@ def save_patient_and_appointments(
             "left_eye": 1 if eye in ["左眼", "双眼"] else 0,
             "right_eye": 1 if eye in ["右眼", "双眼"] else 0,
             "patient_type": patient_data.get("patient_type") or "",
+            "doctor": patient_data.get("doctor") or None,
             "updated_at": now_str,
             "id": patient_id,
         }
@@ -279,7 +280,7 @@ def save_patient_and_appointments(
                 conn.execute(sa_text("""
                     UPDATE patient SET name=:name, diagnosis=:diagnosis, drug_type=:drug_type,
                         left_eye=:left_eye, right_eye=:right_eye, patient_type=:patient_type,
-                        phone=:phone, updated_at=:updated_at
+                        doctor=:doctor, phone=:phone, updated_at=:updated_at
                     WHERE id=:id
                 """), update_params)
             else:
@@ -287,14 +288,14 @@ def save_patient_and_appointments(
                 conn.execute(sa_text("""
                     UPDATE patient SET name=:name, diagnosis=:diagnosis, drug_type=:drug_type,
                         left_eye=:left_eye, right_eye=:right_eye, patient_type=:patient_type,
-                        updated_at=:updated_at
+                        doctor=:doctor, updated_at=:updated_at
                     WHERE id=:id
                 """), update_params)
         else:
             conn.execute(sa_text("""
                 UPDATE patient SET name=:name, diagnosis=:diagnosis, drug_type=:drug_type,
                     left_eye=:left_eye, right_eye=:right_eye, patient_type=:patient_type,
-                    updated_at=:updated_at
+                    doctor=:doctor, updated_at=:updated_at
                 WHERE id=:id
             """), update_params)
     else:
@@ -312,12 +313,13 @@ def save_patient_and_appointments(
         patient_id = str(uuid.uuid4())
         eye = patient_data.get("eye", "")
         inj = patient_data.get("injection_count")
+        doctor_val = patient_data.get("doctor") or None
         conn.execute(sa_text("""
             INSERT INTO patient (id, name, outpatient_number, phone, diagnosis, drug_type,
-                left_eye, right_eye, patient_type, injection_count, status, is_deleted,
+                left_eye, right_eye, patient_type, injection_count, doctor, status, is_deleted,
                 created_at, updated_at)
             VALUES (:id, :name, :outpatient_number, :phone, :diagnosis, :drug_type,
-                :left_eye, :right_eye, :patient_type, :injection_count, 'active', 0,
+                :left_eye, :right_eye, :patient_type, :injection_count, :doctor, 'active', 0,
                 :created_at, :updated_at)
         """), {
             "id": patient_id,
@@ -330,6 +332,7 @@ def save_patient_and_appointments(
             "right_eye": 1 if eye in ["右眼", "双眼"] else 0,
             "patient_type": patient_data.get("patient_type"),
             "injection_count": inj if patient_data.get("patient_type") == "经治" else None,
+            "doctor": doctor_val,
             "created_at": now_str,
             "updated_at": now_str,
         })

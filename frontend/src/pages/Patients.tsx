@@ -5,12 +5,14 @@ import { PlusOutlined, SearchOutlined, EditOutlined, ProjectOutlined, CalendarOu
 import type { ColumnsType } from 'antd/es/table';
 import { Patient, DataDictionaryItem, Appointment } from '@/types';
 import { apiClient } from '@/api/client';
+import { useAuth } from '@/auth/AuthProvider';
 import TreatmentProgress from '@/components/TreatmentProgress';
 import dayjs from 'dayjs';
 import ExcelJS from 'exceljs';
 
 const Patients: React.FC = () => {
   const navigate = useNavigate();
+  const { role, username, doctor } = useAuth();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(false);
   const [drugs, setDrugs] = useState<DataDictionaryItem[]>([]);
@@ -20,6 +22,7 @@ const Patients: React.FC = () => {
   const [diagnosisFilter, setDiagnosisFilter] = useState<string | undefined>(undefined);
   const [drugFilter, setDrugFilter] = useState<string | undefined>(undefined);
   const [eyeFilter, setEyeFilter] = useState<string | undefined>(undefined);
+  const [currentUserDoctor, setCurrentUserDoctor] = useState<string>('');
 
   // Patient Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -93,19 +96,29 @@ const Patients: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [patientsRes, drugsRes, diagnosesRes, doctorsRes] = await Promise.all([
+      const [patientsRes, drugsRes, diagnosesRes, doctorsRes, usersRes] = await Promise.all([
         apiClient.get<Patient[]>('/patients'),
         apiClient.get<DataDictionaryItem[]>('/data-dictionary', { params: { category: 'drug' } }),
         apiClient.get<DataDictionaryItem[]>('/data-dictionary', { params: { category: 'diagnosis' } }),
         apiClient.get<DataDictionaryItem[]>('/data-dictionary', { params: { category: 'doctor' } }),
+        apiClient.get('/users').catch(() => ({ data: [] })),
       ]);
+      
       setPatients(Array.isArray(patientsRes.data) ? patientsRes.data : []);
       setDrugs(Array.isArray(drugsRes.data) ? drugsRes.data.filter(d => d.is_active) : []);
       setDiagnoses(Array.isArray(diagnosesRes.data) ? diagnosesRes.data.filter(d => d.is_active) : []);
       setDoctors(Array.isArray(doctorsRes.data) ? doctorsRes.data.filter(d => d.is_active) : []);
+      
+      // 获取当前用户的医生信息
+      if (username && usersRes.data && Array.isArray(usersRes.data)) {
+        const currentUser = usersRes.data.find((u: any) => u.username === username);
+        if (currentUser && currentUser.doctor) {
+          setCurrentUserDoctor(currentUser.doctor);
+        }
+      }
     } catch (error) {
-      console.error(error);
-      message.error('获取患者数据失败');
+      console.error('获取数据失败:', error);
+      message.error('获取数据失败');
     } finally {
       setLoading(false);
     }
@@ -118,6 +131,10 @@ const Patients: React.FC = () => {
   const handleAdd = () => {
     setEditingPatient(null);
     form.resetFields();
+    // 如果是医生账号，自动填充"归属医生"为当前医生
+    if (role === 'doctor' && doctor) {
+      form.setFieldsValue({ doctor });
+    }
     setIsModalOpen(true);
   };
 
@@ -865,6 +882,18 @@ const Patients: React.FC = () => {
               </Form.Item>
             </Space>
           </div>
+          <Form.Item name="doctor" label="归属医生">
+            <Select 
+              placeholder="请选择归属医生（选填）"
+              allowClear={role !== 'doctor'}
+              showSearch
+              disabled={role === 'doctor'}
+            >
+              {doctors.map(d => (
+                <Select.Option key={d.id} value={d.value}>{d.label}</Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
           <Form.Item name="remarks" label="备注">
             <Input.TextArea 
               rows={3} 

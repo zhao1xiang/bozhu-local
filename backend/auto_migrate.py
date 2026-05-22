@@ -43,12 +43,22 @@ def add_column_safe(cursor, table_name, column_name, column_type, description=""
         return False
     
     try:
-        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+        # SQLite 的 ALTER TABLE 需要特殊处理
+        sql = f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+        logger.debug(f"执行SQL: {sql}")
+        cursor.execute(sql)
         logger.info(f"✓ 添加字段: {table_name}.{column_name} ({description})")
         return True
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" in str(e):
+            logger.debug(f"字段已存在（通过异常检测）: {table_name}.{column_name}")
+            return False
+        else:
+            logger.error(f"✗ 添加字段失败 {table_name}.{column_name}: {e}")
+            raise
     except Exception as e:
         logger.error(f"✗ 添加字段失败 {table_name}.{column_name}: {e}")
-        return False
+        raise
 
 def auto_migrate_database(db_path=None):
     """
@@ -56,7 +66,7 @@ def auto_migrate_database(db_path=None):
     返回: (success: bool, changes_made: int, message: str)
     """
     if db_path is None:
-        db_path = os.path.join(os.path.dirname(__file__), "database.db")
+        db_path = os.path.join(os.getcwd(), "database.db")
     
     # 检查数据库文件
     if not os.path.exists(db_path):
@@ -68,6 +78,7 @@ def auto_migrate_database(db_path=None):
     logger.info("=" * 60)
     
     changes_made = 0
+    conn = None
     
     try:
         # 连接数据库
@@ -79,6 +90,7 @@ def auto_migrate_database(db_path=None):
             'patient': [
                 ('medical_card_number', 'VARCHAR', '就诊卡号'),
                 ('remarks', 'TEXT', '备注'),
+                ('doctor', 'VARCHAR', '归属医生'),
             ],
             'appointment': [
                 ('attending_doctor', 'VARCHAR', '管床医生'),
@@ -88,7 +100,10 @@ def auto_migrate_database(db_path=None):
                 ('left_eye_pressure', 'VARCHAR', '左眼压'),
                 ('right_eye_pressure', 'VARCHAR', '右眼压'),
                 ('eye_wash_result', 'VARCHAR', '冲眼结果'),
-            ]
+            ],
+            'user': [
+                ('doctor', 'VARCHAR', '绑定医生'),
+            ],
         }
         
         # 检查是否需要迁移
@@ -97,6 +112,7 @@ def auto_migrate_database(db_path=None):
             for field_name, field_type, description in fields:
                 if not column_exists(cursor, table_name, field_name):
                     needs_migration = True
+                    logger.debug(f"需要添加字段: {table_name}.{field_name}")
                     break
             if needs_migration:
                 break
@@ -117,11 +133,17 @@ def auto_migrate_database(db_path=None):
         for table_name, fields in migrations.items():
             logger.info(f"检查表: {table_name}")
             for field_name, field_type, description in fields:
-                if add_column_safe(cursor, table_name, field_name, field_type, description):
-                    changes_made += 1
+                try:
+                    if add_column_safe(cursor, table_name, field_name, field_type, description):
+                        changes_made += 1
+                except Exception as e:
+                    logger.error(f"添加字段 {table_name}.{field_name} 失败: {e}")
+                    # 继续处理其他字段
+                    continue
         
         # 提交更改
         conn.commit()
+        logger.info(f"数据库更改已提交，共 {changes_made} 个字段")
         
         # 验证迁移
         logger.info("验证迁移结果...")
@@ -131,6 +153,8 @@ def auto_migrate_database(db_path=None):
                 if not column_exists(cursor, table_name, field_name):
                     logger.error(f"验证失败: {table_name}.{field_name} 不存在")
                     all_ok = False
+                else:
+                    logger.debug(f"✓ 验证通过: {table_name}.{field_name}")
         
         if all_ok:
             logger.info("=" * 60)
@@ -152,8 +176,9 @@ def auto_migrate_database(db_path=None):
         import traceback
         logger.error(traceback.format_exc())
         try:
-            conn.rollback()
-            conn.close()
+            if conn:
+                conn.rollback()
+                conn.close()
         except:
             pass
         return False, 0, f"迁移失败: {str(e)}"

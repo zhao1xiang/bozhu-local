@@ -23,6 +23,8 @@ class PatientBase(SQLModel):
     remarks: Optional[str] = Field(default=None, description="备注")
     status: str = Field(default="active", index=True)
     is_deleted: bool = Field(default=False, index=True, description="软删除标记")
+    # 患者归属医生（与数据字典 doctor value 对应，启动时从预约数据同步）
+    doctor: Optional[str] = Field(default=None, index=True, description="归属医生")
 
 class Patient(PatientBase, table=True):
     id: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)

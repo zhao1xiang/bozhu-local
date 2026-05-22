@@ -123,7 +123,7 @@ def read_appointments(
         bound_doctor = getattr(current_user, 'doctor', None)
         user_wards = getattr(current_user, 'wards', None)
         
-        if role != 'admin' and not patient_id:
+        if role != 'admin':
             from sqlmodel import or_
             
             # 如果医生配置了分组，查询该分组内所有医生的预约

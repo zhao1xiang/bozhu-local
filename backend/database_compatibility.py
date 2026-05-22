@@ -177,6 +177,7 @@ class DatabaseCompatibilityHandler:
                     ('right_vision_corrected', 'TEXT', ''),
                     ('patient_type', 'TEXT', ''),
                     ('injection_count', 'INTEGER', ''),
+                    ('doctor', 'TEXT', ''),
                 ],
                 'appointment': [
                     ('attending_doctor', 'TEXT', ''),

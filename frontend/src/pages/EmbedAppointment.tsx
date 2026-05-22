@@ -26,6 +26,7 @@ interface AppItem {
   drug_name?: string;
   doctor?: string;
   source?: string;
+  is_new?: boolean;
 }
 
 interface PatientData {
@@ -629,6 +630,57 @@ const EmbedAppointment: React.FC = () => {
                 <input style={{ width: '100%', border: '1px solid #d9d9d9', borderRadius: 4, padding: '3px 8px', fontSize: 13 }}
                   value={patientData.outpatient_number || ''} onChange={e => setPatientData(prev => ({ ...prev, outpatient_number: e.target.value }))} />
               </Col>
+              <Col span={6}>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>已完成针数</div>
+                <InputNumber 
+                  style={{ width: '100%' }}
+                  min={0}
+                  value={patientData.injection_count || 0}
+                  onChange={v => {
+                    const oldCount = patientData.injection_count || 0;
+                    const newCount = v || 0;
+                    setPatientData(prev => ({ ...prev, injection_count: newCount }));
+                    
+                    // 如果针数改变，重新生成预约
+                    if (newCount !== oldCount) {
+                      const startCount = newCount + 1;
+                      if (startCount > 1) {
+                        if (startCount <= 4) {
+                          const appts: AppItem[] = [];
+                          let currentBase = dayjs();
+                          for (let cnt = startCount; cnt <= 4; cnt++) {
+                            const date = getNearestInjectionDate(currentBase, injectionWeekdays);
+                            appts.push({
+                              injection_count: cnt,
+                              appointment_date: date,
+                              follow_up_date: date,
+                              treatment_phase: '强化期',
+                              time_slot: '上午',
+                              condition_status: '稳定',
+                            });
+                            currentBase = getNextAppointmentDate(date, cnt + 1, injectionIntervalFirst4);
+                          }
+                          setBozhuAppts(appts);
+                        } else {
+                          const base = getNextAppointmentDate(dayjs(), startCount, injectionIntervalFirst4);
+                          const nextDate = getNearestInjectionDate(base, injectionWeekdays);
+                          setBozhuAppts([{
+                            injection_count: startCount,
+                            appointment_date: nextDate,
+                            follow_up_date: nextDate,
+                            treatment_phase: '巩固期',
+                            time_slot: '上午',
+                            condition_status: '稳定',
+                          }]);
+                        }
+                      } else {
+                        const generated = generateDates(injectionWeekdays, injectionIntervalFirst4);
+                        setBozhuAppts(generated);
+                      }
+                    }
+                  }}
+                />
+              </Col>
             </Row>
           </div>
         )}
@@ -646,16 +698,18 @@ const EmbedAppointment: React.FC = () => {
           <>
             {bozhuAppts.map((appt, idx) => (
               <div key={idx} style={{ background: '#fafafa', borderRadius: 8, padding: '10px 16px', marginBottom: 8, border: '1px solid #e8e8e8', position: 'relative' }}>
-                {/* 右上角删除按钮：1-3针不可删，第4针起可删，有历史时不可删 */}
-                {!hasHistory && (appt.injection_count || 0) >= 4 && (
+                {/* 右上角删除按钮：
+                    - 新增的行（is_new=true）：总是显示删除按钮
+                    - 初始自动生成的行：只有无历史记录且第3针及以后才显示
+                */}
+                {appt.is_new || (!hasHistory && (appt.injection_count || 0) >= 3) ? (
                  <Button
                   type="text"
                   icon={<CloseOutlined style={{ fontSize: 14 }} />}
                   onClick={() => setBozhuAppts(prev => prev.filter((_, i) => i !== idx))}
                   style={{ position: 'absolute', top: 2, right: 2, color: '#ff4d4f', zIndex: 10, width: 32, height: 32 }}
                 />
-
-                )}
+                ) : null}
                 <Row gutter={12} align="middle">
                   <Col span={2}>
                     <span style={{ color: colors.blue, fontWeight: 'bold', fontSize: 13 }}>第{appt.injection_count}针</span>
@@ -735,6 +789,7 @@ const EmbedAppointment: React.FC = () => {
                     treatment_phase: nextCount > 4 ? '巩固期' : '强化期',
                     time_slot: '上午',
                     condition_status: '稳定',
+                    is_new: true,
                   }]);
                 } else {
                   const nextDate = getNearestInjectionDate(dayjs(), injectionWeekdays);
@@ -745,6 +800,7 @@ const EmbedAppointment: React.FC = () => {
                     treatment_phase: '强化期',
                     time_slot: '上午',
                     condition_status: '稳定',
+                    is_new: true,
                   }]);
                 }
               }}

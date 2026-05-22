@@ -15,7 +15,14 @@ import EmbedAppointmentPlain from './pages/EmbedAppointmentPlain';
 import EmbedSuccess from './pages/EmbedSuccess';
 
 const PrivateRoute = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <div>加载中...</div>
+    </div>;
+  }
+  
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 };
 

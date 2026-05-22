@@ -91,6 +91,7 @@ const Login: React.FC = () => {
                 response.data.wards || '',
                 response.data.username || '',
                 values.remember,
+                response.data.doctor || ''
             );
             message.success('登录成功');
             navigate('/app/dashboard');

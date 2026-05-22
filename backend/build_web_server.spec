@@ -1,21 +1,27 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 
 block_cipher = None
 
+# 构建 datas 列表 - 不包含前端文件，因为前端文件会单独放在 exe 同级目录
+datas = [
+    ('database.py', '.'),
+    ('database_compatibility.py', '.'),
+    ('security.py', '.'),
+    ('models', 'models'),
+    ('routers', 'routers'),
+]
+
+# 如果数据库文件存在，也包含它
+if os.path.exists('database.db'):
+    datas.insert(0, ('database.db', '.'))
+    print(f"Including database: database.db")
+
 a = Analysis(
-    ['web_server.py'],
-    pathex=[],
+    ['simple_web_server.py', 'main.py'],
+    pathex=[os.path.abspath('.')],
     binaries=[],
-    datas=[
-        # 包含所有必要的数据文件
-        ('database.db', '.'),
-        ('../frontend/dist', 'frontend'),  # 前端构建文件
-        ('main.py', '.'),      # 主应用文件
-        ('database.py', '.'),
-        ('security.py', '.'),
-        ('models', 'models'),
-        ('routers', 'routers'),
-    ],
+    datas=datas,
     hiddenimports=[
         'uvicorn.logging',
         'uvicorn.loops',
@@ -51,6 +57,10 @@ a = Analysis(
         'python_jose.exceptions',
         'datetime',
         'typing',
+        'sqlite3',
+        'shutil',
+        'logging',
+        'traceback',
     ],
     hookspath=[],
     hooksconfig={},
@@ -71,7 +81,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='眼科注射预约系统-Web版',
+    name='backend_server',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

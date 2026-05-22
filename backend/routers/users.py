@@ -23,13 +23,15 @@ class UserOut(BaseModel):
     username: str
     is_active: bool
     role: str
+    doctor: Optional[str] = None
     wards: Optional[str] = None
 
 
 class UserCreate(BaseModel):
     username: str
     password: str
-    role: str = "ward"
+    role: str = "doctor"
+    doctor: Optional[str] = None
     wards: Optional[str] = None
 
 
@@ -37,20 +39,29 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     is_active: Optional[bool] = None
     role: Optional[str] = None
+    doctor: Optional[str] = None
     wards: Optional[str] = None
 
 
 @router.get("/", response_model=List[UserOut])
 def list_users(
     session: Session = Depends(get_session),
+    doctor: Optional[str] = None,
+    role: Optional[str] = None,
     _: User = Depends(require_admin),
 ):
-    users = session.exec(select(User)).all()
+    query = select(User)
+    if doctor:
+        query = query.where(User.doctor == doctor)
+    if role:
+        query = query.where(User.role == role)
+    users = session.exec(query).all()
     return [UserOut(
         id=u.id,
         username=u.username,
         is_active=getattr(u, 'is_active', True),
         role=getattr(u, 'role', 'admin'),
+        doctor=getattr(u, 'doctor', None),
         wards=getattr(u, 'wards', None),
     ) for u in users]
 
@@ -69,6 +80,7 @@ def create_user(
         hashed_password=get_password_hash(body.password),
         is_active=True,
         role=body.role,
+        doctor=body.doctor,
         wards=body.wards,
     )
     session.add(user)
@@ -77,7 +89,8 @@ def create_user(
     return UserOut(
         id=user.id, username=user.username,
         is_active=getattr(user, 'is_active', True),
-        role=getattr(user, 'role', 'ward'),
+        role=getattr(user, 'role', 'doctor'),
+        doctor=getattr(user, 'doctor', None),
         wards=getattr(user, 'wards', None),
     )
 
@@ -98,6 +111,8 @@ def update_user(
         user.is_active = body.is_active
     if body.role is not None:
         user.role = body.role
+    if body.doctor is not None:
+        user.doctor = body.doctor
     if body.wards is not None:
         user.wards = body.wards
     session.add(user)
@@ -106,7 +121,8 @@ def update_user(
     return UserOut(
         id=user.id, username=user.username,
         is_active=getattr(user, 'is_active', True),
-        role=getattr(user, 'role', 'ward'),
+        role=getattr(user, 'role', 'doctor'),
+        doctor=getattr(user, 'doctor', None),
         wards=getattr(user, 'wards', None),
     )
 

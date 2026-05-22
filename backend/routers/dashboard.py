@@ -35,7 +35,7 @@ def get_optional_user(request: Request, session: Session = Depends(get_session))
         return None
 
 
-def apply_doctor_filter(query, current_user: Optional[User]):
+def apply_doctor_filter(query, current_user: Optional[User], session: Session):
     """
     医生账号只看自己名下的预约（doctor 为空的预约所有人可见）
     admin 不过滤
@@ -53,14 +53,12 @@ def apply_doctor_filter(query, current_user: Optional[User]):
             ward_list = [w.strip() for w in user_wards.split(',') if w.strip()]
             if ward_list:
                 # 查找所有分组包含这些编号的医生
-                session = Session(engine)
                 doctors_in_wards = session.exec(
                     select(DataDictionary).where(
                         DataDictionary.category == 'doctor',
                         DataDictionary.is_active == True
                     )
                 ).all()
-                session.close()
                 
                 # 过滤出分组包含指定编号的医生
                 matching_doctors = []
@@ -98,7 +96,7 @@ def apply_doctor_filter(query, current_user: Optional[User]):
     return query
 
 
-def apply_patient_doctor_filter(query, current_user: Optional[User]):
+def apply_patient_doctor_filter(query, current_user: Optional[User], session: Session):
     """
     对患者表的过滤：医生账号只看自己名下的患者（patient.doctor 为空的患者所有人可见）
     """
@@ -115,14 +113,12 @@ def apply_patient_doctor_filter(query, current_user: Optional[User]):
             ward_list = [w.strip() for w in user_wards.split(',') if w.strip()]
             if ward_list:
                 # 查找所有分组包含这些编号的医生
-                session = Session(engine)
                 doctors_in_wards = session.exec(
                     select(DataDictionary).where(
                         DataDictionary.category == 'doctor',
                         DataDictionary.is_active == True
                     )
                 ).all()
-                session.close()
                 
                 # 过滤出分组包含指定编号的医生
                 matching_doctors = []
@@ -163,7 +159,7 @@ def get_dashboard_stats(
 
     # 累计患者数
     patient_query = select(func.count(Patient.id)).where(Patient.is_deleted == False)
-    patient_query = apply_patient_doctor_filter(patient_query, current_user)
+    patient_query = apply_patient_doctor_filter(patient_query, current_user, session)
     total_patients = session.exec(patient_query).one()
 
     # 累计完成注药
@@ -171,7 +167,7 @@ def get_dashboard_stats(
         Appointment.status == 'completed',
         Appointment.is_deleted == False
     )
-    injection_query = apply_doctor_filter(injection_query, current_user)
+    injection_query = apply_doctor_filter(injection_query, current_user, session)
     total_injections = session.exec(injection_query).one()
 
     # 今日预约
@@ -179,7 +175,7 @@ def get_dashboard_stats(
         Appointment.appointment_date == today,
         Appointment.is_deleted == False
     )
-    today_query = apply_doctor_filter(today_query, current_user)
+    today_query = apply_doctor_filter(today_query, current_user, session)
     today_appointments = session.exec(today_query).one()
 
     # 复诊提醒（今日到期）
@@ -187,7 +183,7 @@ def get_dashboard_stats(
         Appointment.next_follow_up_date == today,
         Appointment.is_deleted == False
     )
-    due_query = apply_doctor_filter(due_query, current_user)
+    due_query = apply_doctor_filter(due_query, current_user, session)
     due_today = session.exec(due_query).one()
 
     return {
@@ -212,7 +208,7 @@ def get_injection_trend(
         Appointment.appointment_date >= start_date,
         Appointment.status == 'completed'
     )
-    query = apply_doctor_filter(query, current_user)
+    query = apply_doctor_filter(query, current_user, session)
     appointments = session.exec(query.order_by(Appointment.appointment_date)).all()
 
     counts = collections.defaultdict(int)
@@ -235,7 +231,7 @@ def get_reinjection_rate(
     denom_query = select(func.count(distinct(Appointment.patient_id))).where(
         Appointment.is_deleted == False
     )
-    denom_query = apply_doctor_filter(denom_query, current_user)
+    denom_query = apply_doctor_filter(denom_query, current_user, session)
     denominator = session.exec(denom_query).one() or 0
 
     if denominator == 0:
@@ -246,7 +242,7 @@ def get_reinjection_rate(
         Appointment.is_deleted == False,
         Appointment.treatment_phase == "强化期",
     )
-    qh_query = apply_doctor_filter(qh_query, current_user)
+    qh_query = apply_doctor_filter(qh_query, current_user, session)
     qh_count = session.exec(qh_query).one() or 0
 
     # 巩固期条数
@@ -254,14 +250,14 @@ def get_reinjection_rate(
         Appointment.is_deleted == False,
         Appointment.treatment_phase == "巩固期",
     )
-    gj_appt_query = apply_doctor_filter(gj_appt_query, current_user)
+    gj_appt_query = apply_doctor_filter(gj_appt_query, current_user, session)
     gj_appt_count = session.exec(gj_appt_query).one() or 0
 
     gj_patient_query = select(func.count(distinct(Appointment.patient_id))).where(
         Appointment.is_deleted == False,
         Appointment.treatment_phase == "巩固期",
     )
-    gj_patient_query = apply_doctor_filter(gj_patient_query, current_user)
+    gj_patient_query = apply_doctor_filter(gj_patient_query, current_user, session)
     gj_patient_count = session.exec(gj_patient_query).one() or 0
 
     return {
@@ -278,7 +274,7 @@ def get_dot_rates(
     denom_query = select(func.count(distinct(Appointment.patient_id))).where(
         Appointment.is_deleted == False
     )
-    denom_query = apply_doctor_filter(denom_query, current_user)
+    denom_query = apply_doctor_filter(denom_query, current_user, session)
     denominator = session.exec(denom_query).one() or 0
 
     if denominator == 0:
@@ -291,7 +287,7 @@ def get_dot_rates(
             Appointment.status == "completed",
             Appointment.injection_count >= n,
         )
-        count_query = apply_doctor_filter(count_query, current_user)
+        count_query = apply_doctor_filter(count_query, current_user, session)
         count = session.exec(count_query).one() or 0
         result[f"rate{n}"] = round(count / denominator * 100, 1)
 
@@ -305,7 +301,7 @@ def get_distributions(
 ):
     # 眼别分布
     patient_query = select(Patient.left_eye, Patient.right_eye).where(Patient.is_deleted == False)
-    patient_query = apply_patient_doctor_filter(patient_query, current_user)
+    patient_query = apply_patient_doctor_filter(patient_query, current_user, session)
     patients = session.exec(patient_query).all()
 
     left_only = sum(1 for l, r in patients if l and not r)
@@ -324,7 +320,7 @@ def get_distributions(
     disease_query = select(Patient.diagnosis, func.count(Patient.id)).where(
         Patient.is_deleted == False
     )
-    disease_query = apply_patient_doctor_filter(disease_query, current_user)
+    disease_query = apply_patient_doctor_filter(disease_query, current_user, session)
     disease_query = disease_query.group_by(Patient.diagnosis)
     disease_counts = session.exec(disease_query).all()
     diseases = [{"name": r[0] or "未填写", "value": r[1]} for r in disease_counts]
@@ -341,7 +337,7 @@ def get_doctor_workload(
     total_query = select(Appointment.doctor, func.count(Appointment.id)).where(
         Appointment.is_deleted == False,
     )
-    total_query = apply_doctor_filter(total_query, current_user)
+    total_query = apply_doctor_filter(total_query, current_user, session)
     total_rows = session.exec(total_query.group_by(Appointment.doctor)).all()
 
     # 各医生强化期条数
@@ -349,7 +345,7 @@ def get_doctor_workload(
         Appointment.is_deleted == False,
         Appointment.treatment_phase == "强化期",
     )
-    qh_query = apply_doctor_filter(qh_query, current_user)
+    qh_query = apply_doctor_filter(qh_query, current_user, session)
     qh_rows = session.exec(qh_query.group_by(Appointment.doctor)).all()
 
     # 各医生巩固期条数
@@ -357,7 +353,7 @@ def get_doctor_workload(
         Appointment.is_deleted == False,
         Appointment.treatment_phase == "巩固期",
     )
-    gj_query = apply_doctor_filter(gj_query, current_user)
+    gj_query = apply_doctor_filter(gj_query, current_user, session)
     gj_rows = session.exec(gj_query.group_by(Appointment.doctor)).all()
 
     total_map = {r[0] or "未知": r[1] for r in total_rows}

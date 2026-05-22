@@ -7,10 +7,12 @@ interface AuthContextType {
     role: string;
     wards: string;
     username: string;
-    login: (token: string, role?: string, wards?: string, username?: string, remember?: boolean) => void;
+    doctor: string;
+    login: (token: string, role?: string, wards?: string, username?: string, remember?: boolean, doctor?: string) => void;
     logout: () => void;
     isAuthenticated: boolean;
     isAdmin: boolean;
+    isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -28,6 +30,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [username, setUsername] = useState<string>(() =>
         localStorage.getItem('username') || sessionStorage.getItem('username') || ''
     );
+    const [doctor, setDoctor] = useState<string>(() =>
+        localStorage.getItem('doctor') || sessionStorage.getItem('doctor') || ''
+    );
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        // 初始化完成
+        setIsLoading(false);
+    }, []);
 
     useEffect(() => {
         if (token) {
@@ -37,6 +48,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             storage.setItem('role', role);
             storage.setItem('wards', wards);
             storage.setItem('username', username);
+            storage.setItem('doctor', doctor);
 
             const interceptor = apiClient.interceptors.request.use(config => {
                 config.headers.Authorization = `Bearer ${token}`;
@@ -54,25 +66,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 apiClient.interceptors.response.eject(resInterceptor);
             };
         } else {
-            ['token', 'role', 'wards', 'username'].forEach(k => {
+            ['token', 'role', 'wards', 'username', 'doctor'].forEach(k => {
                 localStorage.removeItem(k);
                 sessionStorage.removeItem(k);
             });
         }
-    }, [token]);
+    }, [token, role, wards, username, doctor]);
 
-    const login = (newToken: string, newRole = 'admin', newWards = '', newUsername = '', remember = true) => {
+    const login = (newToken: string, newRole = 'admin', newWards = '', newUsername = '', remember = true, newDoctor = '') => {
         setToken(newToken);
         setRole(newRole);
         setWards(newWards);
         setUsername(newUsername);
+        setDoctor(newDoctor);
         const storage = remember ? localStorage : sessionStorage;
         const other = remember ? sessionStorage : localStorage;
         storage.setItem('token', newToken);
         storage.setItem('role', newRole);
         storage.setItem('wards', newWards);
         storage.setItem('username', newUsername);
-        ['token', 'role', 'wards', 'username'].forEach(k => other.removeItem(k));
+        storage.setItem('doctor', newDoctor);
+        ['token', 'role', 'wards', 'username', 'doctor'].forEach(k => other.removeItem(k));
     };
 
     const logout = () => {
@@ -80,7 +94,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setRole('admin');
         setWards('');
         setUsername('');
-        ['token', 'role', 'wards', 'username'].forEach(k => {
+        setDoctor('');
+        ['token', 'role', 'wards', 'username', 'doctor'].forEach(k => {
             localStorage.removeItem(k);
             sessionStorage.removeItem(k);
         });
@@ -89,10 +104,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return (
         <AuthContext.Provider value={{
-            token, role, wards, username,
+            token, role, wards, username, doctor,
             login, logout,
             isAuthenticated: !!token,
             isAdmin: role === 'admin',
+            isLoading,
         }}>
             {children}
         </AuthContext.Provider>

@@ -20,6 +20,9 @@ const DictionaryTable: React.FC<{ category: string, title: string }> = ({ catego
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<DataDictionaryItem | null>(null);
   const [form] = Form.useForm();
+  
+  // 环境变量控制：是否启用医生账号功能
+  const ENABLE_DOCTOR_ACCOUNTS = import.meta.env.VITE_ENABLE_DOCTOR_ACCOUNTS === 'true';
 
   const fetchItems = async () => {
     setLoading(true);
@@ -51,13 +54,31 @@ const DictionaryTable: React.FC<{ category: string, title: string }> = ({ catego
     setIsModalOpen(true);
   };
 
-  const handleEdit = (item: DataDictionaryItem) => {
+  const handleEdit = async (item: DataDictionaryItem) => {
     setEditingItem(item);
-    form.setFieldsValue({
+    const formData: any = {
       ...item,
       extra: item.extra ? item.extra.split(',').filter(Boolean) : [],
       ward: (item as any).ward || '',
-    });
+    };
+    
+    // 如果是医生，从后端查询对应的用户账号信息
+    if (category === 'doctor') {
+      try {
+        const response = await apiClient.get('/users', {
+          params: { doctor: item.value, role: 'doctor' }
+        });
+        if (response.data && response.data.length > 0) {
+          const user = response.data[0];
+          formData.username = user.username;
+          // 密码不回显，只在编辑时允许修改
+        }
+      } catch (error) {
+        console.error('获取用户账号失败:', error);
+      }
+    }
+    
+    form.setFieldsValue(formData);
     setIsModalOpen(true);
   };
 
@@ -81,12 +102,56 @@ const DictionaryTable: React.FC<{ category: string, title: string }> = ({ catego
       if (Array.isArray(values.extra)) {
         values.extra = values.extra.join(',');
       }
-      if (editingItem) {
-        await apiClient.put(`/data-dictionary/${editingItem.id}`, values);
-        message.success('更新成功');
+      
+      // 如果是医生，需要创建或更新对应的用户账号
+      if (category === 'doctor' && ENABLE_DOCTOR_ACCOUNTS && values.username) {
+        const username = values.username;
+        const password = values.password;
+        
+        if (editingItem) {
+          // 编辑医生时，更新医生信息和用户账号
+          await apiClient.put(`/data-dictionary/${editingItem.id}`, values);
+          
+          // 查询并更新对应的用户账号
+          try {
+            const userResponse = await apiClient.get('/users', {
+              params: { doctor: editingItem.value, role: 'doctor' }
+            });
+            if (userResponse.data && userResponse.data.length > 0) {
+              const user = userResponse.data[0];
+              const updateData: any = { doctor: values.value, wards: values.ward || null };
+              if (password) {
+                updateData.password = password;
+              }
+              await apiClient.put(`/users/${user.id}`, updateData);
+            }
+          } catch (error) {
+            console.error('更新用户账号失败:', error);
+          }
+          
+          message.success('更新成功');
+        } else {
+          // 新增医生时，同时创建用户账号
+          await apiClient.post('/data-dictionary', values);
+          // 创建对应的用户账号
+          await apiClient.post('/users', {
+            username,
+            password,
+            role: 'doctor',
+            doctor: values.value,
+            wards: values.ward || null,
+            is_active: true
+          });
+          message.success('医生和账号创建成功');
+        }
       } else {
-        await apiClient.post('/data-dictionary', values);
-        message.success('创建成功');
+        if (editingItem) {
+          await apiClient.put(`/data-dictionary/${editingItem.id}`, values);
+          message.success('更新成功');
+        } else {
+          await apiClient.post('/data-dictionary', values);
+          message.success('创建成功');
+        }
       }
       setIsModalOpen(false);
       fetchItems();
@@ -192,8 +257,17 @@ const DictionaryTable: React.FC<{ category: string, title: string }> = ({ catego
           </Form.Item>
           {category === 'doctor' && (
             <>
-              <Form.Item
-                name="extra"
+              {(ENABLE_DOCTOR_ACCOUNTS || editingItem) && (
+                <>
+                  <Form.Item name="username" label="账号" rules={[{ required: ENABLE_DOCTOR_ACCOUNTS && !editingItem }]}>
+                    <Input placeholder="输入账号用户名" disabled={editingItem ? true : false} />
+                  </Form.Item>
+                  <Form.Item name="password" label={editingItem ? "新密码（不填则不修改）" : "密码"} rules={editingItem ? [] : [{ required: ENABLE_DOCTOR_ACCOUNTS }]}>
+                    <Input.Password placeholder="输入密码" />
+                  </Form.Item>
+                </>
+              )}
+              <Form.Item name="extra"
                 label="玻注日"
                 extra="该医生的玻注日，不设置则使用全局配置"
               >
@@ -412,139 +486,6 @@ const ChangePassword: React.FC = () => {
   );
 };
 
-// ===== 账号管理组件 =====
-interface UserItem { id: number; username: string; is_active: boolean; role: string; doctor?: string; wards?: string; }
-
-const AccountManagement: React.FC = () => {
-  const [users, setUsers] = React.useState<UserItem[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [isModalOpen, setIsModalOpen] = React.useState(false);
-  const [editingUser, setEditingUser] = React.useState<UserItem | null>(null);
-  const [form] = Form.useForm();
-  const [doctors, setDoctors] = React.useState<{label: string; value: string}[]>([]);
-
-  const fetchUsers = async () => {
-    setLoading(true);
-    try {
-      const res = await apiClient.get<UserItem[]>('/users');
-      setUsers(res.data);
-    } catch { message.error('获取账号列表失败'); }
-    finally { setLoading(false); }
-  };
-
-  const fetchDoctors = async () => {
-    try {
-      const res = await apiClient.get('/data-dictionary', { params: { category: 'doctor' } });
-      const doctorList = (res.data || [])
-        .filter((d: any) => d.is_active)
-        .map((d: any) => ({ label: d.label, value: d.value }));
-      setDoctors(doctorList);
-    } catch { message.error('获取医生列表失败'); }
-  };
-
-  React.useEffect(() => { 
-    fetchUsers();
-    fetchDoctors();
-  }, []);
-
-  const handleAddUser = () => {
-    setEditingUser(null);
-    form.resetFields();
-    form.setFieldsValue({ role: 'doctor', is_active: true });
-    setIsModalOpen(true);
-  };
-
-  const handleEditUser = (u: UserItem) => {
-    setEditingUser(u);
-    form.setFieldsValue({ ...u, password: '' });
-    setIsModalOpen(true);
-  };
-
-  const handleDeleteUser = async (id: number) => {
-    try {
-      await apiClient.delete(`/users/${id}`);
-      message.success('删除成功');
-      fetchUsers();
-    } catch (e: any) { message.error(e?.response?.data?.detail || '删除失败'); }
-  };
-
-  const handleOkUser = async () => {
-    try {
-      const values = await form.validateFields();
-      if (editingUser) {
-        const payload: any = { 
-          role: values.role, 
-          doctor: values.doctor || null, 
-          wards: values.wards || null,
-          is_active: values.is_active 
-        };
-        if (values.password) payload.password = values.password;
-        await apiClient.put(`/users/${editingUser.id}`, payload);
-        message.success('更新成功');
-      } else {
-        await apiClient.post('/users', values);
-        message.success('创建成功');
-      }
-      setIsModalOpen(false);
-      fetchUsers();
-    } catch (e: any) { message.error(e?.response?.data?.detail || '操作失败'); }
-  };
-
-  const userColumns = [
-    { title: '用户名', dataIndex: 'username', key: 'username' },
-    { title: '角色', dataIndex: 'role', key: 'role', render: (r: string) => r === 'admin' ? '管理员' : '医生账号' },
-    { title: '绑定医生', dataIndex: 'doctor', key: 'doctor', render: (d: string) => d || <span style={{ color: '#999' }}>未绑定</span> },
-    { title: '分组', dataIndex: 'wards', key: 'wards', render: (w: string) => w || <span style={{ color: '#999' }}>未配置</span> },
-    { title: '状态', dataIndex: 'is_active', key: 'is_active', render: (v: boolean) => <Switch checked={v} disabled /> },
-    {
-      title: '操作', key: 'action',
-      render: (_: any, record: UserItem) => (
-        <span>
-          <Button type="link" icon={<EditOutlined />} onClick={() => handleEditUser(record)}>编辑</Button>
-          {record.username !== 'admin' && (
-            <Button type="link" danger icon={<DeleteOutlined />} onClick={() => handleDeleteUser(record.id)}>删除</Button>
-          )}
-        </span>
-      )
-    }
-  ];
-
-  return (
-    <div>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAddUser}>添加账号</Button>
-      </div>
-      <Table columns={userColumns} dataSource={users} rowKey="id" loading={loading} />
-      <Modal title={editingUser ? '编辑账号' : '添加账号'} open={isModalOpen} onOk={handleOkUser} onCancel={() => setIsModalOpen(false)}>
-        <Form form={form} layout="vertical">
-          {!editingUser && (
-            <Form.Item name="username" label="用户名" rules={[{ required: true }]}><Input /></Form.Item>
-          )}
-          <Form.Item name="password" label={editingUser ? '新密码（不填则不修改）' : '密码'} rules={editingUser ? [] : [{ required: true }]}>
-            <Input.Password />
-          </Form.Item>
-          <Form.Item name="role" label="角色">
-            <Select options={[{ label: '管理员', value: 'admin' }, { label: '医生账号', value: 'doctor' }]} />
-          </Form.Item>
-          <Form.Item name="doctor" label="绑定医生" extra="选择该账号绑定的医生">
-            <Select 
-              placeholder="请选择医生"
-              allowClear
-              showSearch
-              options={doctors}
-              filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-            />
-          </Form.Item>
-          <Form.Item name="wards" label="分组" extra="填入分组编号，多个分组用逗号分隔（例如：1,2,3）；配置后该账号可看到这些分组内的所有患者">
-            <Input placeholder="例如：1,2,3" />
-          </Form.Item>
-          <Form.Item name="is_active" label="启用" valuePropName="checked"><Switch /></Form.Item>
-        </Form>
-      </Modal>
-    </div>
-  );
-};
-
 const SystemConfig: React.FC = () => {
   return (
     <Card title="系统配置">
@@ -554,7 +495,6 @@ const SystemConfig: React.FC = () => {
         { key: 'drug', label: '药品管理', children: <DictionaryTable category="drug" title="药品" /> },
         { key: 'diagnosis', label: '疾病诊断管理', children: <DictionaryTable category="diagnosis" title="疾病诊断" /> },
         { key: 'general', label: '通用设置', children: <GeneralSettings /> },
-        { key: 'accounts', label: '账号管理', children: <AccountManagement /> },
         { key: 'security', label: '安全设置', children: <ChangePassword /> },
       ]} />
     </Card>

@@ -7,10 +7,12 @@ import dayjs from 'dayjs';
 import { PlusOutlined, PrinterOutlined, CloseOutlined, DownloadOutlined } from '@ant-design/icons';
 import { Appointment, Patient, DataDictionaryItem } from '@/types';
 import { apiClient } from '@/api/client';
+import { useAuth } from '@/auth/AuthProvider';
 import ExcelJS from 'exceljs';
 
 const Appointments: React.FC = () => {
   const navigate = useNavigate();
+  const { role, wards, doctor } = useAuth();
   const [searchParams] = useSearchParams();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -26,16 +28,16 @@ const Appointments: React.FC = () => {
   const [injectionIntervalFirst4, setInjectionIntervalFirst4] = useState<number>(30);
 
   // 根据系统配置的玻注日，从给定日期开始向后寻找最近的一个玻注日
-  const getNearestInjectionDate = (baseDate: Dayjs, weekdays: string[]): Dayjs => {
+  const getNearestInjectionDate = (baseDate: Dayjs, weekdays: string[] | null | undefined): Dayjs => {
     console.log('getNearestInjectionDate called:', { baseDate: baseDate.format('YYYY-MM-DD'), weekdays });
     
-    if (!weekdays || weekdays.length === 0) {
+    if (!weekdays || !Array.isArray(weekdays) || weekdays.length === 0) {
       console.log('No weekdays configured, returning baseDate');
       return baseDate;
     }
 
     const allowed = weekdays
-      .map((w) => parseInt(w, 10))
+      .map((w) => parseInt(String(w), 10))
       .filter((n) => !Number.isNaN(n));
 
     console.log('Allowed weekdays:', allowed);
@@ -420,6 +422,11 @@ const Appointments: React.FC = () => {
         }
       ]
     };
+
+    // 医生账号自动填充为当前医生
+    if (role === 'doctor' && !lastDoctor && doctor) {
+      initialValues.doctor = doctor;
+    }
 
     if (preSelectedPatientId) {
       initialValues.patient_id = preSelectedPatientId;
@@ -1050,6 +1057,7 @@ const Appointments: React.FC = () => {
                 <Select
                   placeholder="选择医生"
                   options={doctors}
+                  disabled={role === 'doctor'}
                   onChange={(val) => {
                     // 选了医生后，如果医生配置了波注日(extra字段)，重新计算预约日期
                     const doctorItem = doctors.find((d: any) => d.value === val);

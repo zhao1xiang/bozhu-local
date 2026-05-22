@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 from database import engine
 from models import DataDictionary, DataDictionaryBase
+from models.user import User
+from security import get_current_user
 from typing import List, Optional
 
 router = APIRouter(prefix="/data-dictionary", tags=["data-dictionary"])
@@ -10,8 +12,18 @@ def get_session():
     with Session(engine) as session:
         yield session
 
+def require_admin(current_user: User = Depends(get_current_user)):
+    """检查用户是否为管理员"""
+    if getattr(current_user, 'role', 'admin') != 'admin':
+        raise HTTPException(status_code=403, detail="仅管理员可操作")
+    return current_user
+
 @router.post("/", response_model=DataDictionary)
-def create_item(item: DataDictionaryBase, session: Session = Depends(get_session)):
+def create_item(
+    item: DataDictionaryBase, 
+    session: Session = Depends(get_session),
+    _: User = Depends(require_admin),
+):
     db_item = DataDictionary.model_validate(item)
     session.add(db_item)
     session.commit()
@@ -31,7 +43,12 @@ def read_items(
     return items
 
 @router.put("/{item_id}", response_model=DataDictionary)
-def update_item(item_id: str, item: DataDictionaryBase, session: Session = Depends(get_session)):
+def update_item(
+    item_id: str, 
+    item: DataDictionaryBase, 
+    session: Session = Depends(get_session),
+    _: User = Depends(require_admin),
+):
     db_item = session.get(DataDictionary, item_id)
     if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -46,7 +63,11 @@ def update_item(item_id: str, item: DataDictionaryBase, session: Session = Depen
     return db_item
 
 @router.delete("/{item_id}")
-def delete_item(item_id: str, session: Session = Depends(get_session)):
+def delete_item(
+    item_id: str, 
+    session: Session = Depends(get_session),
+    _: User = Depends(require_admin),
+):
     db_item = session.get(DataDictionary, item_id)
     if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")

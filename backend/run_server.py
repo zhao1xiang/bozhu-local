@@ -221,7 +221,7 @@ if __name__ == "__main__":
             os.chdir(exe_dir)
         
         # 检查数据库文件
-        db_file = "database.db"
+        db_file = os.path.join(os.getcwd(), "database.db")
         if os.path.exists(db_file):
             logger.info(f"[OK] 数据库文件存在: {db_file}")
             logger.info(f"     文件大小: {os.path.getsize(db_file)} 字节")

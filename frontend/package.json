@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:hospital": "tsc -b && vite build --mode hospital",
+    "build:standard": "tsc -b && vite build --mode standard",
     "lint": "eslint .",
     "prepreview": "npm run build",
     "preview": "vite preview",

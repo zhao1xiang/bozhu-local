@@ -685,14 +685,14 @@ const EmbedAppointmentPlain: React.FC = () => {
 
             {bozhuAppts.map((appt, idx) => (
               <div key={idx} style={{ background: '#fafafa', borderRadius: 8, padding: '10px 16px', marginBottom: 8, border: '1px solid #e8e8e8', position: 'relative' }}>
-                {!hasHistory && (appt.injection_count || 0) >= 3 && (
+                {appt.is_new || (!hasHistory && (appt.injection_count || 0) >= 3) ? (
                   <Button
                       type="text"
                       icon={<CloseOutlined style={{ fontSize: 14 }} />}
                       onClick={() => setBozhuAppts(prev => prev.filter((_, i) => i !== idx))}
                       style={{ position: 'absolute', top: 2, right: 2, color: '#ff4d4f', zIndex: 10, width: 32, height: 32 }}
                   />
-                )}
+                ) : null}
                 <Row gutter={12} align="middle">
                   <Col span={2}>
                     <Tag color="blue">第{appt.injection_count}针</Tag>
@@ -782,6 +782,7 @@ const EmbedAppointmentPlain: React.FC = () => {
                     treatment_phase: nextCount > 4 ? '巩固期' : '强化期',
                     time_slot: '上午',
                     condition_status: '稳定',
+                    is_new: true,
                   }]);
                 } else {
                   const nextDate = getNearestDate(dayjs(), injectionWeekdays);
@@ -792,6 +793,7 @@ const EmbedAppointmentPlain: React.FC = () => {
                     treatment_phase: '强化期',
                     time_slot: '上午',
                     condition_status: '稳定',
+                    is_new: true,
                   }]);
                 }
               }}

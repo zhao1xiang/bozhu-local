@@ -60,7 +60,7 @@ def add_column_safe_exec(cursor, table_name, column_name, column_type, descripti
 
 def auto_migrate_database():
     """自动执行数据库迁移"""
-    db_path = "database.db"
+    db_path = os.path.join(os.getcwd(), "database.db")
     
     if not os.path.exists(db_path):
         logging.warning("数据库文件不存在，将在首次启动时创建")

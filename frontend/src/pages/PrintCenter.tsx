@@ -158,52 +158,27 @@ const PrintCenter: React.FC = () => {
   }, [selectedPatient, appointments, printPhoneNumber]);
 
   const injectAndPrint = (html: string) => {
-    // 先清理可能残留的旧打印区域
-    document.getElementById('html-print-area')?.remove();
-    document.getElementById('html-print-style')?.remove();
-    const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-    const styleMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
-    const bodyContent = bodyMatch ? bodyMatch[1] : html;
-    const rawStyles = styleMatch ? styleMatch.map((s: string) => s.replace(/<\/?style[^>]*>/gi, '')).join('\n') : '';
-
-    const printDiv = document.createElement('div');
-    printDiv.id = 'html-print-area';
-    printDiv.innerHTML = bodyContent;
-    document.body.appendChild(printDiv);
-
-    const styleEl = document.createElement('style');
-    styleEl.id = 'html-print-style';
-    const scopedStyles = rawStyles.replace(/([^{}]+)\{/g, (match: string, selector: string) => {
-      const trimmed = selector.trim();
-      if (trimmed.startsWith('@') || trimmed.startsWith('from') || trimmed.startsWith('to')) return match;
-      const scoped = trimmed.split(',').map((s: string) => `#html-print-area ${s.trim()}`).join(', ');
-      return `${scoped} {`;
-    });
-    styleEl.textContent = `
-      ${scopedStyles}
-      #html-print-area { position: fixed; left: 0; top: 0; width: 100%; height: 100%; background: white; z-index: 99999; overflow: auto; font-family: "SimSun","宋体",serif; font-size: 14px; color: #000; padding: 8mm 10mm; box-sizing: border-box; }
-      @media print {
-        @page { size: A4 portrait; margin: 8mm; }
-        body > *:not(#html-print-area):not(#html-print-style) { display: none !important; }
-        #html-print-area { position: static !important; width: 194mm !important; height: auto !important; overflow: visible !important; padding: 0 !important; z-index: auto !important; }
-      }
-    `;
-    document.head.appendChild(styleEl);
-
-    // 等待所有图片加载完成后再打印
-    const imgs = Array.from(printDiv.querySelectorAll('img')) as HTMLImageElement[];
-    const waitAll = imgs.map(img => new Promise<void>(resolve => {
-      if (img.complete && img.naturalWidth > 0) { resolve(); return; }
-      img.onload = () => resolve();
-      img.onerror = () => resolve();
-    }));
-    Promise.all(waitAll).then(() => {
-      window.print();
-      setTimeout(() => {
-        document.getElementById('html-print-area')?.remove();
-        document.getElementById('html-print-style')?.remove();
-      }, 1000);
-    });
+    // 使用 iframe 方式打印，确保样式和图片正确加载
+    document.getElementById('html-print-iframe')?.remove();
+    const iframe = document.createElement('iframe');
+    iframe.id = 'html-print-iframe';
+    iframe.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;border:none;z-index:99999;background:white;';
+    document.body.appendChild(iframe);
+    
+    iframe.onload = () => {
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      const imgs = iframeDoc ? Array.from(iframeDoc.querySelectorAll('img')) as HTMLImageElement[] : [];
+      const waitAll = imgs.map(img => new Promise<void>(resolve => {
+        if (img.complete && img.naturalWidth > 0) { resolve(); return; }
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+      }));
+      Promise.all(waitAll).then(() => {
+        iframe.contentWindow?.print();
+        setTimeout(() => { document.getElementById('html-print-iframe')?.remove(); }, 1000);
+      });
+    };
+    iframe.srcdoc = html;
   };
 
   const handlePrint = async () => {
