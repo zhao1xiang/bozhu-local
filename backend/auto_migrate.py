@@ -102,7 +102,10 @@ def auto_migrate_database(db_path=None):
                 ('eye_wash_result', 'VARCHAR', '冲眼结果'),
             ],
             'user': [
+                ('is_active', 'BOOLEAN DEFAULT 1', '是否激活'),
+                ('role', 'VARCHAR DEFAULT "admin"', '用户角色'),
                 ('doctor', 'VARCHAR', '绑定医生'),
+                ('wards', 'VARCHAR', '分组'),
             ],
         }
         
