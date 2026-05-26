@@ -42,7 +42,24 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup():
+    import logging
+    logger = logging.getLogger(__name__)
+    
     create_db_and_tables()
+    
+    # 运行数据库迁移
+    try:
+        logger.info("Running database migrations...")
+        from auto_migrate import check_and_migrate
+        if check_and_migrate():
+            logger.info("Database migrations completed successfully")
+        else:
+            logger.warning("Database migrations completed with warnings")
+    except Exception as e:
+        logger.error(f"Failed to run database migrations: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+    
     # Create default admin user if not exists
     with Session(engine) as session:
         user = session.exec(select(User).where(User.username == "admin")).first()
