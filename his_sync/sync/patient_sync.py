@@ -1,6 +1,7 @@
 import json
 import yaml
 import uuid
+import inspect
 from datetime import datetime
 from contextlib import contextmanager
 
@@ -115,6 +116,8 @@ def upsert_patient(cur, p):
     right_vision = p.get("right_vision")
     left_vision_corrected = p.get("left_vision_corrected")
     right_vision_corrected = p.get("right_vision_corrected")
+    remarks = p.get("remarks")
+    doctor = p.get("doctor")
 
     if outpatient_number:
         # 检查是否存在
@@ -179,6 +182,12 @@ def upsert_patient(cur, p):
             if right_vision_corrected is not None:
                 update_fields.append("right_vision_corrected=?")
                 update_values.append(right_vision_corrected)
+            if remarks:
+                update_fields.append("remarks=?")
+                update_values.append(remarks)
+            if doctor:
+                update_fields.append("doctor=?")
+                update_values.append(doctor)
             
             update_values.append(outpatient_number)  # WHERE 条件
             
@@ -197,8 +206,8 @@ def upsert_patient(cur, p):
                 (id, name, outpatient_number, medical_card_number, phone, 
                  diagnosis, drug_type, patient_type, left_eye, right_eye, injection_count,
                  left_vision, right_vision, left_vision_corrected, right_vision_corrected,
-                 status, is_deleted, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 remarks, doctor, status, is_deleted, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     str(uuid.uuid4()),
@@ -208,6 +217,7 @@ def upsert_patient(cur, p):
                     right_eye if right_eye is not None else False,
                     injection_count,
                     left_vision, right_vision, left_vision_corrected, right_vision_corrected,
+                    remarks, doctor,
                     'active', 0,
                     datetime.now(), datetime.now()
                 )
@@ -221,8 +231,8 @@ def upsert_patient(cur, p):
             (id, name, outpatient_number, medical_card_number, phone,
              diagnosis, drug_type, patient_type, left_eye, right_eye, injection_count,
              left_vision, right_vision, left_vision_corrected, right_vision_corrected,
-             status, is_deleted, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             remarks, doctor, status, is_deleted, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 str(uuid.uuid4()),
@@ -232,6 +242,7 @@ def upsert_patient(cur, p):
                 right_eye if right_eye is not None else False,
                 injection_count,
                 left_vision, right_vision, left_vision_corrected, right_vision_corrected,
+                remarks, doctor,
                 'active', 0,
                 datetime.now(), datetime.now()
             )
@@ -263,6 +274,7 @@ def sync_patient():
 
             # 获取适配器
             convert_patient = get_adapter(adapter_name)
+            adapter_accepts_conn = len(inspect.signature(convert_patient).parameters) >= 2
 
             # 根据类型查询数据
             if his_type == "cache":
@@ -302,7 +314,10 @@ def sync_patient():
             # 处理每条记录
             for i, row in enumerate(rows, 1):
                 try:
-                    patient_data = convert_patient(row, his_conn)
+                    if adapter_accepts_conn:
+                        patient_data = convert_patient(row, his_conn)
+                    else:
+                        patient_data = convert_patient(row)
                     if patient_data is None:
                         # 适配器返回 None 表示跳过此记录
                         continue

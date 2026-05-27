@@ -9,6 +9,8 @@ a = Analysis(
     datas=[],
     hiddenimports=[
         'pyodbc',
+        'cx_Oracle',
+        'oracledb',
         'yaml',
         'sqlite3',
         'uuid',
@@ -21,6 +23,7 @@ a = Analysis(
         'adapter.hospital3_adapter',
         'adapter.hospital4_adapter',
         'adapter.hospital5_adapter',
+        'adapter.hospital6_adapter',
         'core.db_factory',
         'core.db_sqlite',
         'core.health_check',

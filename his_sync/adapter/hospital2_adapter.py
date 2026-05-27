@@ -17,8 +17,9 @@ def convert_patient(row):
         medical_card_number = str(row["medical_card_number"]) if row.get("medical_card_number") is not None else None
         phone = str(row["phone"]) if row.get("phone") is not None else None
         diagnosis = str(row["diagnosis"]).strip() if row.get("diagnosis") is not None else None
+        drug_name = str(row["drug_name"]).strip() if row.get("drug_name") is not None else None
         patient_type = str(row["patient_type"]) if row.get("patient_type") is not None else None
-
+        
         # 诊断白名单过滤，不在列表内直接跳过
         if diagnosis not in VALID_DIAGNOSES:
             logger.debug(f"诊断 '{diagnosis}' 不在白名单，跳过患者: {outpatient_number}")
@@ -42,6 +43,7 @@ def convert_patient(row):
             "medical_card_number": medical_card_number,
             "phone": phone,
             "diagnosis": diagnosis,
+            "drug_type": drug_name,
             "patient_type": patient_type,
             "left_eye": left_eye,
             "right_eye": right_eye,

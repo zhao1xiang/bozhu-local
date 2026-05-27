@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session, select
+from sqlalchemy import text
 from database import engine
 from models import Patient, PatientBase
 from models.user import User
@@ -29,6 +30,42 @@ def get_optional_user(request: Request, session: Session = Depends(get_session))
         return session.exec(select(User).where(User.username == username)).first()
     except Exception:
         return None
+
+
+def _safe_datetime(value):
+    from datetime import datetime, timezone
+    if value is None or str(value).strip() == "":
+        return datetime.now(timezone.utc)
+    if isinstance(value, datetime):
+        return value
+    text_value = str(value).strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text_value[:len(fmt)], fmt)
+        except ValueError:
+            pass
+    try:
+        return datetime.fromisoformat(text_value)
+    except Exception:
+        return datetime.now(timezone.utc)
+
+
+def _safe_bool(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in ("1", "true", "yes", "y", "是")
+
+
+def _patient_row_to_dict(row):
+    data = dict(row._mapping)
+    data["left_eye"] = _safe_bool(data.get("left_eye"))
+    data["right_eye"] = _safe_bool(data.get("right_eye"))
+    data["is_deleted"] = _safe_bool(data.get("is_deleted"))
+    data["created_at"] = _safe_datetime(data.get("created_at"))
+    data["updated_at"] = _safe_datetime(data.get("updated_at"))
+    return data
 
 @router.post("/", response_model=Patient)
 def create_patient(patient: PatientBase, session: Session = Depends(get_session)):
@@ -69,9 +106,11 @@ def read_patients(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     try:
-        q = select(Patient).where(Patient.is_deleted == False)
+        where_clauses = ["COALESCE(is_deleted, 0) = 0"]
+        params = {"limit": limit, "skip": skip}
         if outpatient_number:
-            q = q.where(Patient.outpatient_number == outpatient_number)
+            where_clauses.append("outpatient_number = :outpatient_number")
+            params["outpatient_number"] = outpatient_number
 
         # 权限控制逻辑：
         # 1. 如果医生配置了分组（user.wards 不为空），查询该分组内所有医生的患者
@@ -81,8 +120,6 @@ def read_patients(
         user_wards = getattr(current_user, 'wards', None)
 
         if role != 'admin':
-            from sqlmodel import or_
-            
             # 如果医生配置了分组，查询该分组内所有医生的患者
             if user_wards:
                 # user_wards 格式: "1,2,3" (分组编号列表)
@@ -106,28 +143,39 @@ def read_patients(
                             matching_doctors.append(doc.value)
                     
                     if matching_doctors:
-                        q = q.where(Patient.doctor.in_(matching_doctors))
+                        names = []
+                        for idx, doctor_name in enumerate(matching_doctors):
+                            key = f"doctor_{idx}"
+                            params[key] = doctor_name
+                            names.append(f":{key}")
+                        where_clauses.append(f"doctor IN ({', '.join(names)})")
                     else:
                         # 分组内没有医生，返回空结果
-                        q = q.where(Patient.doctor == None)
+                        where_clauses.append("doctor IS NULL")
                 else:
                     # 分组为空，返回空结果
-                    q = q.where(Patient.doctor == None)
+                    where_clauses.append("doctor IS NULL")
             # 如果医生没有配置分组，按医生名字查询
             elif bound_doctor:
-                q = q.where(
-                    or_(
-                        Patient.doctor == None,
-                        Patient.doctor == '',
-                        Patient.doctor == bound_doctor,
-                    )
-                )
+                where_clauses.append("(doctor IS NULL OR doctor = '' OR doctor = :bound_doctor)")
+                params["bound_doctor"] = bound_doctor
             else:
                 # 既没有分组也没有绑定医生，返回空结果
-                q = q.where(Patient.doctor == None)
+                where_clauses.append("doctor IS NULL")
 
-        patients = session.exec(q.order_by(Patient.created_at.desc()).offset(skip).limit(limit)).all()
-        return patients
+        sql = text(f"""
+            SELECT id, name, outpatient_number, medical_card_number, phone,
+                   diagnosis, diagnosis_other, drug_type, drug_type_other,
+                   left_vision, right_vision, left_vision_corrected, right_vision_corrected,
+                   left_eye, right_eye, patient_type, injection_count, remarks,
+                   status, is_deleted, doctor, created_at, updated_at
+            FROM patient
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY datetime(created_at) DESC
+            LIMIT :limit OFFSET :skip
+        """)
+        rows = session.execute(sql, params).all()
+        return [_patient_row_to_dict(row) for row in rows]
     except Exception as e:
         import traceback
         traceback.print_exc()

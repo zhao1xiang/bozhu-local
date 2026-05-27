@@ -59,6 +59,21 @@ hospitals:
       password: "Ext1108#2026@Zhuyao#"
       procedure: web_WFYKYYJTT_Interface.view_zy_message
     name: 潍坊眼科医院
+  hospital6:
+    adapter: hospital6_adapter
+    his:
+      type: oracle
+      charset: utf-8
+      host: 172.20.110.214
+      port: 1521
+      db: hit
+      user: INTERFACE_SHWF
+      password: HHSshwf.202605
+      # 可选：Oracle Instant Client 目录。不填时自动查找程序目录下的 instantclient/
+      # client_lib_dir: instantclient
+    name: 湖南医药学院总医院
+    view:
+      patient: eyes_department_mrs_operation
 sqlite:
   path: ../backend/database.db
 sync:

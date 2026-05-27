@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session, select
+from sqlalchemy import text
 from database import engine
 from models import Appointment, AppointmentBase
 from models.user import User
 from models.data_dictionary import DataDictionary
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime, timezone
 import logging
 from jose import jwt
 from security import SECRET_KEY
@@ -32,6 +33,60 @@ def get_optional_user(request: Request, session: Session = Depends(get_session))
         return session.exec(select(User).where(User.username == username)).first()
     except Exception:
         return None
+
+
+def _safe_date(value):
+    if value is None or str(value).strip() == "":
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    text_value = str(value).strip()
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"):
+        try:
+            return datetime.strptime(text_value[:len(fmt)], fmt).date()
+        except ValueError:
+            pass
+    try:
+        return datetime.fromisoformat(text_value[:10]).date()
+    except Exception:
+        return None
+
+
+def _safe_datetime(value):
+    if value is None or str(value).strip() == "":
+        return datetime.now(timezone.utc)
+    if isinstance(value, datetime):
+        return value
+    text_value = str(value).strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text_value[:len(fmt)], fmt)
+        except ValueError:
+            pass
+    try:
+        return datetime.fromisoformat(text_value)
+    except Exception:
+        return datetime.now(timezone.utc)
+
+
+def _safe_bool(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in ("1", "true", "yes", "y", "是")
+
+
+def _appointment_row_to_dict(row):
+    data = dict(row._mapping)
+    data["is_deleted"] = _safe_bool(data.get("is_deleted"))
+    for key in ("appointment_date", "follow_up_date", "next_follow_up_date"):
+        data[key] = _safe_date(data.get(key))
+    data["created_at"] = _safe_datetime(data.get("created_at"))
+    data["updated_at"] = _safe_datetime(data.get("updated_at"))
+    return data
 
 @router.post("/", response_model=Appointment)
 def create_appointment(appointment: AppointmentBase, session: Session = Depends(get_session)):
@@ -102,21 +157,33 @@ def read_appointments(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     try:
-        from models.patient import Patient
-        query = select(Appointment).where(Appointment.is_deleted == False)
+        where_clauses = ["COALESCE(appointment.is_deleted, 0) = 0"]
+        params = {"limit": limit, "skip": skip}
 
         if patient_id:
-            query = query.where(Appointment.patient_id == patient_id)
+            where_clauses.append("appointment.patient_id = :patient_id")
+            params["patient_id"] = patient_id
         if patient_name:
-            query = query.join(Patient).where(Patient.name.contains(patient_name))
+            where_clauses.append("""
+                EXISTS (
+                    SELECT 1 FROM patient
+                    WHERE patient.id = appointment.patient_id
+                      AND patient.name LIKE :patient_name
+                )
+            """)
+            params["patient_name"] = f"%{patient_name}%"
         if start_date:
-            query = query.where(Appointment.appointment_date >= start_date)
+            where_clauses.append("appointment.appointment_date >= :start_date")
+            params["start_date"] = start_date.isoformat()
         if end_date:
-            query = query.where(Appointment.appointment_date <= end_date)
+            where_clauses.append("appointment.appointment_date <= :end_date")
+            params["end_date"] = end_date.isoformat()
         if injection_number:
-            query = query.where(Appointment.injection_number.contains(injection_number))
+            where_clauses.append("appointment.injection_number LIKE :injection_number")
+            params["injection_number"] = f"%{injection_number}%"
         if doctor:
-            query = query.where(Appointment.doctor.contains(doctor))
+            where_clauses.append("appointment.doctor LIKE :doctor")
+            params["doctor"] = f"%{doctor}%"
 
         # 医生账号过滤：只看自己名下的预约（doctor 为空的预约所有人可见）
         role = getattr(current_user, 'role', 'admin')
@@ -124,8 +191,6 @@ def read_appointments(
         user_wards = getattr(current_user, 'wards', None)
         
         if role != 'admin':
-            from sqlmodel import or_
-            
             # 如果医生配置了分组，查询该分组内所有医生的预约
             if user_wards:
                 # user_wards 格式: "1,2,3" (分组编号列表)
@@ -149,36 +214,42 @@ def read_appointments(
                             matching_doctors.append(doc.value)
                     
                     if matching_doctors:
-                        query = query.where(
-                            or_(
-                                Appointment.doctor == None,
-                                Appointment.doctor == '',
-                                Appointment.doctor.in_(matching_doctors),
-                            )
-                        )
+                        names = []
+                        for idx, doctor_name in enumerate(matching_doctors):
+                            key = f"allowed_doctor_{idx}"
+                            params[key] = doctor_name
+                            names.append(f":{key}")
+                        where_clauses.append(f"(appointment.doctor IS NULL OR appointment.doctor = '' OR appointment.doctor IN ({', '.join(names)}))")
                     else:
                         # 分组内没有医生，返回空结果
-                        query = query.where(Appointment.doctor == None)
+                        where_clauses.append("appointment.doctor IS NULL")
                 else:
                     # 分组为空，返回空结果
-                    query = query.where(Appointment.doctor == None)
+                    where_clauses.append("appointment.doctor IS NULL")
             # 如果医生没有配置分组，按医生名字查询
             elif bound_doctor:
-                query = query.where(
-                    or_(
-                        Appointment.doctor == None,
-                        Appointment.doctor == '',
-                        Appointment.doctor == bound_doctor,
-                    )
-                )
+                where_clauses.append("(appointment.doctor IS NULL OR appointment.doctor = '' OR appointment.doctor = :bound_doctor)")
+                params["bound_doctor"] = bound_doctor
             else:
                 # 既没有分组也没有绑定医生，返回空结果
-                query = query.where(Appointment.doctor == None)
+                where_clauses.append("appointment.doctor IS NULL")
 
-        query = query.order_by(Appointment.created_at.desc(), Appointment.appointment_date.asc())
-        query = query.offset(skip).limit(limit)
-        appointments = session.exec(query).all()
-        return appointments
+        sql = text(f"""
+            SELECT patient_id, appointment_date, time_slot, status, notes, source,
+                   is_deleted, injection_number, injection_count, eye, drug_name,
+                   drug_name_other, cost_type, doctor, attending_doctor, virus_report,
+                   blood_sugar, blood_pressure, left_eye_pressure, right_eye_pressure,
+                   eye_wash_result, follow_up_date, next_follow_up_date, diagnosis,
+                   pre_op_vision_left, pre_op_vision_right, pre_op_vision_left_corrected,
+                   pre_op_vision_right_corrected, treatment_phase, condition_status,
+                   id, created_at, updated_at
+            FROM appointment
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY datetime(created_at) DESC, date(appointment_date) ASC
+            LIMIT :limit OFFSET :skip
+        """)
+        rows = session.execute(sql, params).all()
+        return [_appointment_row_to_dict(row) for row in rows]
     except Exception as e:
         import traceback
         traceback.print_exc()

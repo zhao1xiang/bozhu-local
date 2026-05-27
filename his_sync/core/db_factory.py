@@ -1,7 +1,9 @@
-"""
+""" 
 数据库连接工厂，支持多医院连接
 """
+import os
 import pyodbc
+import sys
 import time
 from core.logger import logger
 
@@ -59,6 +61,8 @@ def get_his_conn(hospital_config, max_retries=3, retry_delay=5):
 
     if his_type == "cache":
         return _get_cache_conn(hospital_config, max_retries, retry_delay)
+    if his_type == "oracle":
+        return _get_oracle_conn(hospital_config, max_retries, retry_delay)
 
     # 默认 mssql 连接
     hospital_name = hospital_config["name"]
@@ -145,6 +149,110 @@ def _get_cache_conn(hospital_config, max_retries=3, retry_delay=5):
                 raise
 
 
+def _oracle_client_candidates(his_config):
+    """返回可能的 Oracle Instant Client 目录。"""
+    candidates = []
+    configured = his_config.get("client_lib_dir")
+    if configured:
+        candidates.append(configured)
+
+    base_dirs = [os.getcwd()]
+    if getattr(sys, "frozen", False):
+        base_dirs.append(os.path.dirname(sys.executable))
+    base_dirs.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    for base_dir in base_dirs:
+        candidates.extend([
+            os.path.join(base_dir, "instantclient"),
+            os.path.join(base_dir, "oracle_client"),
+        ])
+
+    seen = set()
+    result = []
+    for path in candidates:
+        abs_path = os.path.abspath(path)
+        if abs_path not in seen:
+            seen.add(abs_path)
+            result.append(abs_path)
+    return result
+
+
+def _init_oracle_client(oracle_driver, his_config):
+    """初始化 Oracle Client，优先使用配置或包内目录。"""
+    if not hasattr(oracle_driver, "init_oracle_client"):
+        return
+
+    for client_dir in _oracle_client_candidates(his_config):
+        oci_dll = os.path.join(client_dir, "oci.dll")
+        if not os.path.exists(oci_dll):
+            continue
+        try:
+            oracle_driver.init_oracle_client(lib_dir=client_dir)
+            logger.info(f"Oracle Client 已加载: {client_dir}")
+            return
+        except Exception as e:
+            logger.warning(f"Oracle Client 加载失败 {client_dir}: {e}")
+
+
+def _get_oracle_driver(his_config):
+    """加载 Oracle 驱动，优先使用 cx_Oracle 兼容 Oracle 11g。"""
+    try:
+        import cx_Oracle
+        _init_oracle_client(cx_Oracle, his_config)
+        return "cx_Oracle", cx_Oracle
+    except ImportError:
+        pass
+
+    try:
+        import oracledb
+        _init_oracle_client(oracledb, his_config)
+        return "oracledb", oracledb
+    except ImportError:
+        raise RuntimeError("未安装 Oracle 驱动，请安装 cx_Oracle 或 python-oracledb")
+
+
+def _get_oracle_conn(hospital_config, max_retries=3, retry_delay=5):
+    """连接 Oracle 数据库。Oracle 11g 推荐安装 Oracle Instant Client 并使用 cx_Oracle。"""
+    his_config = hospital_config["his"]
+    hospital_name = hospital_config["name"]
+    host = his_config["host"]
+    port = his_config.get("port", 1521)
+    service_name = his_config["db"]
+    username = his_config["user"]
+    password = his_config["password"]
+    encoding = his_config.get("charset", "UTF-8")
+
+    driver_name, oracle_driver = _get_oracle_driver(his_config)
+
+    try:
+        dsn = oracle_driver.makedsn(host, port, service_name=service_name)
+    except TypeError:
+        dsn = oracle_driver.makedsn(host, port, sid=service_name)
+
+    for attempt in range(max_retries):
+        try:
+            logger.debug(f"尝试连接 {hospital_name} Oracle 数据库 (第 {attempt + 1} 次)")
+            if driver_name == "cx_Oracle":
+                conn = oracle_driver.connect(
+                    username,
+                    password,
+                    dsn,
+                    encoding=encoding,
+                    nencoding=encoding,
+                    events=False,
+                )
+            else:
+                conn = oracle_driver.connect(user=username, password=password, dsn=dsn, events=False)
+            logger.info(f"{hospital_name} Oracle 数据库连接成功")
+            return conn
+        except Exception as e:
+            logger.warning(f"{hospital_name} Oracle 数据库连接失败 (第 {attempt + 1} 次): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+            else:
+                raise
+
+
 def get_adapter(adapter_name):
     """动态加载适配器模块"""
     try:
@@ -158,6 +266,8 @@ def get_adapter(adapter_name):
             from adapter.hospital4_adapter import convert_patient
         elif adapter_name == "hospital5_adapter":
             from adapter.hospital5_adapter import convert_patient
+        elif adapter_name == "hospital6_adapter":
+            from adapter.hospital6_adapter import convert_patient
         else:
             raise ValueError(f"未知的适配器: {adapter_name}")
         logger.debug(f"成功加载适配器: {adapter_name}")

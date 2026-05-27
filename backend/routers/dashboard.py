@@ -1,17 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session, select, func, distinct, or_
+from sqlalchemy import text
 from database import engine
 from models import Appointment, Patient, FollowUpRecord
 from models.user import User
 from models.data_dictionary import DataDictionary
 from security import get_current_user
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import collections
+import logging
 from typing import Optional
 from jose import jwt
 from security import SECRET_KEY
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+logger = logging.getLogger(__name__)
 
 
 def get_session():
@@ -203,23 +206,84 @@ def get_injection_trend(
     today = date.today()
     start_date = today - timedelta(days=180)
 
-    query = select(Appointment).where(
-        Appointment.is_deleted == False,
-        Appointment.appointment_date >= start_date,
-        Appointment.status == 'completed'
-    )
-    query = apply_doctor_filter(query, current_user, session)
-    appointments = session.exec(query.order_by(Appointment.appointment_date)).all()
+    allowed_doctors = None
+    role = getattr(current_user, 'role', 'admin')
+    if role != 'admin':
+        bound_doctor = getattr(current_user, 'doctor', None)
+        user_wards = getattr(current_user, 'wards', None)
+        if user_wards:
+            ward_list = [w.strip() for w in user_wards.split(',') if w.strip()]
+            allowed_doctors = []
+            if ward_list:
+                doctors_in_wards = session.exec(
+                    select(DataDictionary).where(
+                        DataDictionary.category == 'doctor',
+                        DataDictionary.is_active == True
+                    )
+                ).all()
+                for doc in doctors_in_wards:
+                    doc_wards = [w.strip() for w in (doc.ward or '').split(',') if w.strip()]
+                    if any(w in ward_list for w in doc_wards):
+                        allowed_doctors.append(doc.value)
+        elif bound_doctor:
+            allowed_doctors = [bound_doctor]
+        else:
+            allowed_doctors = []
+
+    rows = session.exec(text("""
+        SELECT appointment_date, doctor
+        FROM appointment
+        WHERE is_deleted = 0
+          AND status = 'completed'
+          AND appointment_date IS NOT NULL
+        ORDER BY appointment_date
+    """)).all()
 
     counts = collections.defaultdict(int)
-    for appt in appointments:
+    skipped = 0
+    for raw_date, doctor in rows:
+        if allowed_doctors is not None:
+            if doctor not in (None, '') and doctor not in allowed_doctors:
+                continue
+
+        appt_date = _coerce_date(raw_date)
+        if not appt_date:
+            skipped += 1
+            continue
+        if appt_date < start_date:
+            continue
+
         if dimension == "week":
-            key = appt.appointment_date.strftime("%Y-W%W")
+            key = appt_date.strftime("%Y-W%W")
         else:
-            key = appt.appointment_date.strftime("%Y-%m")
+            key = appt_date.strftime("%Y-%m")
         counts[key] += 1
 
+    if skipped:
+        logger.warning("dashboard trend skipped %s rows with invalid appointment_date", skipped)
+
     return [{"date": k, "count": v} for k, v in sorted(counts.items())]
+
+
+def _coerce_date(value):
+    if value is None:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    text_value = str(value).strip()
+    if not text_value:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"):
+        try:
+            return datetime.strptime(text_value[:len(fmt)], fmt).date()
+        except ValueError:
+            pass
+    try:
+        return datetime.fromisoformat(text_value[:10]).date()
+    except Exception:
+        return None
 
 
 @router.get("/charts/reinjection-rate")
