@@ -99,8 +99,6 @@ const EmbedAppointment: React.FC = () => {
     }
     // 预加载打印模板和二维码图片，确保打印时已缓存
     fetch(`/print-template.html?t=${Date.now()}`).catch(() => {});
-    const preloadImg = new Image();
-    preloadImg.src = '/qrcode.png';
     verifyAndLoad(dataParam, signParam);
   }, []);
 

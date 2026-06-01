@@ -7,18 +7,35 @@ VALID_DIAGNOSES = {
 }
 
 
+def _get(row, name):
+    if name in row:
+        return row.get(name)
+
+    for key, value in row.items():
+        if str(key).strip().lower() == name.lower():
+            return value
+    return None
+
+
+def _str(value):
+    if value is None:
+        return None
+    value = str(value).strip()
+    return value or None
+
+
 def convert_patient(row):
     """
     转换第二家医院的患者数据
     """
     try:
-        name = str(row["name"]).strip() if row.get("name") is not None else None
-        outpatient_number = str(row["outpatient_number"]) if row.get("outpatient_number") is not None else None
-        medical_card_number = str(row["medical_card_number"]) if row.get("medical_card_number") is not None else None
-        phone = str(row["phone"]) if row.get("phone") is not None else None
-        diagnosis = str(row["diagnosis"]).strip() if row.get("diagnosis") is not None else None
-        drug_name = str(row["drug_name"]).strip() if row.get("drug_name") is not None else None
-        patient_type = str(row["patient_type"]) if row.get("patient_type") is not None else None
+        name = _str(_get(row, "name"))
+        outpatient_number = _str(_get(row, "outpatient_number"))
+        medical_card_number = _str(_get(row, "medical_card_number"))
+        phone = _str(_get(row, "phone"))
+        diagnosis = _str(_get(row, "diagnosis"))
+        drug_name = _str(_get(row, "drug_name"))
+        patient_type = _str(_get(row, "patient_type"))
         
         # 诊断白名单过滤，不在列表内直接跳过
         if diagnosis not in VALID_DIAGNOSES:
@@ -26,12 +43,13 @@ def convert_patient(row):
             return None
         
         # 眼别转换：左眼/右眼/双眼 -> left_eye/right_eye bool
-        eye_raw = str(row["eye"]).strip() if row.get("eye") is not None else ""
+        eye_raw = _str(_get(row, "eye")) or ""
         left_eye = eye_raw in ["左眼", "双眼"]
         right_eye = eye_raw in ["右眼", "双眼"]
 
         # 已完成针数
-        injection_count = int(row["injection_count"]) if row.get("injection_count") is not None else None
+        injection_count_raw = _get(row, "injection_count")
+        injection_count = int(injection_count_raw) if injection_count_raw is not None else None
 
         if not name:
             logger.warning(f"患者姓名为空，住院号: {outpatient_number}")

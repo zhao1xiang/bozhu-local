@@ -111,7 +111,10 @@ def check_database_connections():
         else:
             conn = get_his_conn(hospital_config)
             cursor = conn.cursor()
-            cursor.execute("SELECT 1")
+            if his_type == "oracle":
+                cursor.execute("SELECT 1 FROM dual")
+            else:
+                cursor.execute("SELECT 1")
             cursor.fetchone()
             cursor.close()
             conn.close()

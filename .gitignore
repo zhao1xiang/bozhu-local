@@ -80,6 +80,7 @@ simple-web-package-win7-v*/
 simple-web-package-mac-v*/
 *.dmg
 *.zip
+his-sync-package/instantclient/
 web-dist/backend/__pycache__/
 web-dist/backend/models/__pycache__/
 web-dist/backend/routers/__pycache__/

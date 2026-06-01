@@ -112,12 +112,23 @@ def upsert_patient(cur, p):
     right_eye = p.get("right_eye")
     injection_count = p.get("injection_count")
     drug_type = p.get("drug_type")
+    if drug_type:
+        logger.info(f"同步患者药品: outpatient_number={outpatient_number}, drug_type={drug_type}")
     left_vision = p.get("left_vision")
     right_vision = p.get("right_vision")
     left_vision_corrected = p.get("left_vision_corrected")
     right_vision_corrected = p.get("right_vision_corrected")
     remarks = p.get("remarks")
     doctor = p.get("doctor")
+    yyrq = p.get("yyrq")
+    ryrq = p.get("ryrq")
+
+    cur.execute("PRAGMA table_info(patient)")
+    existing_columns = {row[1] for row in cur.fetchall()}
+    optional_patient_fields = [
+        ("yyrq", yyrq),
+        ("ryrq", ryrq),
+    ]
 
     if outpatient_number:
         # 检查是否存在
@@ -188,6 +199,10 @@ def upsert_patient(cur, p):
             if doctor:
                 update_fields.append("doctor=?")
                 update_values.append(doctor)
+            for column_name, column_value in optional_patient_fields:
+                if column_name in existing_columns and column_value:
+                    update_fields.append(f"{column_name}=?")
+                    update_values.append(column_value)
             
             update_values.append(outpatient_number)  # WHERE 条件
             
@@ -222,6 +237,18 @@ def upsert_patient(cur, p):
                     datetime.now(), datetime.now()
                 )
             )
+            optional_update_fields = []
+            optional_update_values = []
+            for column_name, column_value in optional_patient_fields:
+                if column_name in existing_columns and column_value:
+                    optional_update_fields.append(f"{column_name}=?")
+                    optional_update_values.append(column_value)
+            if optional_update_fields:
+                optional_update_values.append(outpatient_number)
+                cur.execute(
+                    f"UPDATE patient SET {', '.join(optional_update_fields)} WHERE outpatient_number=?",
+                    optional_update_values,
+                )
             return "inserted"
     else:
         # 没有门诊号，直接插入
@@ -248,6 +275,116 @@ def upsert_patient(cur, p):
             )
         )
         return "inserted"
+
+
+def upsert_patient(cur, p):
+    """Insert or update patient data using only columns that exist locally."""
+    outpatient_number = p.get("outpatient_number")
+    name = p.get("name", "")
+    now = datetime.now()
+
+    cur.execute("PRAGMA table_info(patient)")
+    existing_columns = {row[1] for row in cur.fetchall()}
+
+    def has_col(column_name):
+        return column_name in existing_columns
+
+    def add_update(fields, values, column_name, column_value, allow_empty=False):
+        if has_col(column_name) and (allow_empty or column_value is not None):
+            fields.append(f"{column_name}=?")
+            values.append(column_value)
+
+    def insert_patient(row_values):
+        columns = []
+        values = []
+        for column_name, column_value in row_values:
+            if has_col(column_name):
+                columns.append(column_name)
+                values.append(column_value)
+        placeholders = ",".join(["?"] * len(columns))
+        cur.execute(
+            f"INSERT INTO patient ({', '.join(columns)}) VALUES ({placeholders})",
+            values,
+        )
+
+    row_values = [
+        ("id", str(uuid.uuid4())),
+        ("name", name),
+        ("outpatient_number", outpatient_number),
+        ("medical_card_number", p.get("medical_card_number")),
+        ("phone", p.get("phone")),
+        ("diagnosis", p.get("diagnosis")),
+        ("drug_type", p.get("drug_type")),
+        ("patient_type", p.get("patient_type")),
+        ("left_eye", p.get("left_eye") if p.get("left_eye") is not None else False),
+        ("right_eye", p.get("right_eye") if p.get("right_eye") is not None else False),
+        ("injection_count", p.get("injection_count")),
+        ("left_vision", p.get("left_vision")),
+        ("right_vision", p.get("right_vision")),
+        ("left_vision_corrected", p.get("left_vision_corrected")),
+        ("right_vision_corrected", p.get("right_vision_corrected")),
+        ("remarks", p.get("remarks")),
+        ("doctor", p.get("doctor")),
+        ("yyrq", p.get("yyrq")),
+        ("ryrq", p.get("ryrq")),
+        ("status", "active"),
+        ("is_deleted", 0),
+        ("created_at", now),
+        ("updated_at", now),
+    ]
+
+    drug_type = p.get("drug_type")
+    if drug_type:
+        logger.info(f"同步患者药品: outpatient_number={outpatient_number}, drug_type={drug_type}")
+
+    if outpatient_number:
+        cur.execute("SELECT id FROM patient WHERE outpatient_number=?", (outpatient_number,))
+        exists = cur.fetchone()
+        if exists:
+            update_fields = []
+            update_values = []
+            add_update(update_fields, update_values, "name", name, allow_empty=True)
+            add_update(update_fields, update_values, "updated_at", now, allow_empty=True)
+            add_update(update_fields, update_values, "medical_card_number", p.get("medical_card_number"), allow_empty=True)
+
+            non_empty_fields = [
+                "phone",
+                "diagnosis",
+                "patient_type",
+                "drug_type",
+                "remarks",
+                "doctor",
+                "yyrq",
+                "ryrq",
+            ]
+            for column_name in non_empty_fields:
+                column_value = p.get(column_name)
+                if column_value:
+                    add_update(update_fields, update_values, column_name, column_value)
+
+            nullable_fields = [
+                "left_eye",
+                "right_eye",
+                "injection_count",
+                "left_vision",
+                "right_vision",
+                "left_vision_corrected",
+                "right_vision_corrected",
+            ]
+            for column_name in nullable_fields:
+                column_value = p.get(column_name)
+                if column_value is not None:
+                    add_update(update_fields, update_values, column_name, column_value)
+
+            update_values.append(outpatient_number)
+            cur.execute(
+                f"UPDATE patient SET {', '.join(update_fields)} WHERE outpatient_number=?",
+                update_values,
+            )
+            return "updated"
+
+    insert_patient(row_values)
+    return "inserted"
 
 
 def sync_patient():

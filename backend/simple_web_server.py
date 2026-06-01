@@ -9,6 +9,7 @@ import threading
 import webbrowser
 import traceback
 import logging
+import mimetypes
 from datetime import datetime
 
 def setup_logging():
@@ -236,27 +237,71 @@ def main():
         
         # 挂载静态文件 - 只挂载 assets 目录，避免拦截 API 路由
         # SPA 的 HTML 页面通过单独的路由处理
-        from fastapi.staticfiles import StaticFiles
-        from fastapi.responses import FileResponse
+        from fastapi.responses import FileResponse, PlainTextResponse
+        mimetypes.add_type("application/javascript; charset=utf-8", ".js")
+        mimetypes.add_type("text/css; charset=utf-8", ".css")
+        mimetypes.add_type("application/json; charset=utf-8", ".json")
+        mimetypes.add_type("image/svg+xml", ".svg")
         
         assets_dir = os.path.join(frontend_dir, "assets")
         if os.path.exists(assets_dir):
-            app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+            @app.get("/assets/{asset_path:path}")
+            async def serve_asset(asset_path: str):
+                assets_root = os.path.abspath(assets_dir)
+                file_path = os.path.abspath(os.path.join(assets_dir, asset_path))
+                if not file_path.startswith(assets_root + os.sep) or not os.path.isfile(file_path):
+                    logger.warning(f"静态资源不存在: /assets/{asset_path} -> {file_path}")
+                    return PlainTextResponse("Asset not found", status_code=404)
+
+                suffix = os.path.splitext(file_path)[1].lower()
+                media_types = {
+                    ".js": "application/javascript; charset=utf-8",
+                    ".mjs": "application/javascript; charset=utf-8",
+                    ".css": "text/css; charset=utf-8",
+                    ".map": "application/json; charset=utf-8",
+                    ".json": "application/json; charset=utf-8",
+                    ".svg": "image/svg+xml",
+                    ".png": "image/png",
+                    ".jpg": "image/jpeg",
+                    ".jpeg": "image/jpeg",
+                    ".webp": "image/webp",
+                    ".woff": "font/woff",
+                    ".woff2": "font/woff2",
+                }
+                return FileResponse(file_path, media_type=media_types.get(suffix))
+
             logger.info(f"静态资源已挂载: /assets -> {assets_dir}")
         
         # 为前端静态文件（非 assets）添加路由
         from starlette.requests import Request as StarletteRequest
         
-        @app.get("/logo.png")
-        @app.get("/favicon.svg") 
-        @app.get("/qrcode.png")
-        @app.get("/print-template.html")
-        @app.get("/print-template-no-qr.html")
-        async def serve_static_file(request: StarletteRequest):
-            path = request.url.path.lstrip("/")
-            file_path = os.path.join(frontend_dir, path)
-            if os.path.isfile(file_path):
-                return FileResponse(file_path)
+        @app.get("/{static_path:path}")
+        async def serve_frontend_static_or_spa(static_path: str):
+            static_root = os.path.abspath(frontend_dir)
+            file_path = os.path.abspath(os.path.join(frontend_dir, static_path))
+            if (
+                static_path
+                and not static_path.startswith(("api/", "app/", "embed/", "assets/"))
+                and file_path.startswith(static_root + os.sep)
+                and os.path.isfile(file_path)
+            ):
+                suffix = os.path.splitext(file_path)[1].lower()
+                media_types = {
+                    ".html": "text/html; charset=utf-8",
+                    ".png": "image/png",
+                    ".jpg": "image/jpeg",
+                    ".jpeg": "image/jpeg",
+                    ".svg": "image/svg+xml",
+                    ".webp": "image/webp",
+                    ".gif": "image/gif",
+                    ".ico": "image/x-icon",
+                    ".css": "text/css; charset=utf-8",
+                    ".js": "application/javascript; charset=utf-8",
+                    ".json": "application/json; charset=utf-8",
+                    ".woff": "font/woff",
+                    ".woff2": "font/woff2",
+                }
+                return FileResponse(file_path, media_type=media_types.get(suffix))
             return FileResponse(os.path.join(frontend_dir, "index.html"), media_type="text/html")
         
         # 所有非 API 路由返回 index.html（SPA 路由）

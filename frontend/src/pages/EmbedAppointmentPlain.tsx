@@ -93,9 +93,6 @@ const EmbedAppointmentPlain: React.FC = () => {
   useEffect(() => {
     // 预加载打印模板和二维码图片
     fetch(`/print-template.html?t=${Date.now()}`).catch(() => {});
-    const preloadImg = new Image();
-    preloadImg.src = '/qrcode.png';
-
     // 明文参数直接从 URL 读取，"无"视为空值
     const clean = (v: string | null) => (!v || v === '无' || v === 'null' || v === 'undefined') ? '' : v.trim();
     const name = clean(searchParams.get('name'));

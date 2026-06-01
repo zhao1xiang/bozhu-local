@@ -14,6 +14,7 @@ NC='\033[0m' # No Color
 SERVICE_NAME="眼科注射预约系统"
 PYTHON_CMD="python3"
 MAIN_SCRIPT="main_static.py"
+UVICORN_CMD="uvicorn"
 PID_FILE="backend.pid"
 LOG_FILE="logs/backend.log"
 PORT=8031
@@ -123,14 +124,16 @@ start_service() {
     
     # 启动服务
     print_info "启动后台服务..."
-    nohup $PYTHON_CMD $MAIN_SCRIPT > "$LOG_FILE" 2>&1 &
+    # 确保在 backend 目录中启动
+    cd "$(dirname "$0")" || exit 1
+    nohup $PYTHON_CMD -m uvicorn main_static:app --host 0.0.0.0 --port $PORT > "$LOG_FILE" 2>&1 &
     local pid=$!
     
     # 保存PID
     echo $pid > "$PID_FILE"
     
     # 等待服务启动
-    sleep 3
+    sleep 5
     
     # 检查服务是否成功启动
     if is_running; then

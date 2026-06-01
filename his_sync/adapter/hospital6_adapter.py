@@ -39,12 +39,14 @@ def convert_patient(row, his_conn=None):
         operation = _str(_get(row, "OPERATION"))
         operation_drug = _str(_get(row, "OPERATION_DRUG"))
 
-        if not record_no:
-            logger.debug(f"住院号为空，跳过患者: {name}, 住院流水号: {inpatient_no}")
+        sync_number = inpatient_no or record_no
+
+        if not sync_number:
+            logger.debug(f"住院流水号和住院号均为空，跳过患者: {name}")
             return None
 
         if not name:
-            logger.warning(f"患者姓名为空，住院号: {record_no}")
+            logger.warning(f"患者姓名为空，同步号: {sync_number}")
 
         diagnosis_parts = []
         if diagnosis_code:
@@ -54,14 +56,14 @@ def convert_patient(row, his_conn=None):
         diagnosis = " ".join(diagnosis_parts) if diagnosis_parts else None
 
         logger.debug(
-            f"转换湖南医药学院总医院患者: {record_no} -> {name}, "
+            f"转换湖南医药学院总医院患者: {sync_number} -> {name}, "
             f"诊断: {diagnosis_name}, 手术: {operation}"
         )
 
         return {
             "name": name or "",
-            "outpatient_number": record_no,
-            "medical_card_number": inpatient_no,
+            "outpatient_number": sync_number,
+            "medical_card_number": record_no,
             "phone": phone,
             "diagnosis": diagnosis,
             "drug_type": operation_drug,
@@ -70,6 +72,7 @@ def convert_patient(row, his_conn=None):
             "right_eye": None,
             "injection_count": None,
             "remarks": (
+                f"住院号: {record_no or ''}; "
                 f"住院次数: {in_times or ''}; "
                 f"出院时间: {_str(_get(row, 'OUT_TIME')) or ''}; "
                 f"手术日期: {operation_date or ''}; "

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Table, Button, Input, Space, Modal, Form, Select, Checkbox, InputNumber, message, DatePicker, Tag, Radio, Upload } from 'antd';
+import { Table, Button, Input, Space, Modal, Form, Select, Checkbox, InputNumber, message, DatePicker, Tag, Radio, Upload, Tooltip } from 'antd';
 import { PlusOutlined, SearchOutlined, EditOutlined, ProjectOutlined, CalendarOutlined, DownloadOutlined, UploadOutlined, LinkOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { Patient, DataDictionaryItem, Appointment } from '@/types';
@@ -544,11 +544,46 @@ const Patients: React.FC = () => {
     return false; // 阻止自动上传
   };
 
+  const renderCompactTags = (text: string | undefined, color: string, maxWidth: number) => {
+    if (!text) return '-';
+    const items = text.split(/[,，|]/).map((s: string) => s.trim()).filter(Boolean);
+    return (
+      <Tooltip title={text} mouseEnterDelay={0.4}>
+        <div
+          style={{
+            maxWidth,
+            maxHeight: 52,
+            overflow: 'hidden',
+            lineHeight: '26px',
+          }}
+        >
+          {items.map((item: string, idx: number) => (
+            <Tag
+              key={idx}
+              color={color}
+              style={{
+                maxWidth: maxWidth - 12,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                verticalAlign: 'middle',
+                marginInlineEnd: 4,
+              }}
+            >
+              {item}
+            </Tag>
+          ))}
+        </div>
+      </Tooltip>
+    );
+  };
+
   const columns: ColumnsType<Patient> = [
     {
       title: '姓名',
       dataIndex: 'name',
       key: 'name',
+      width: 72,
       filteredValue: searchText ? [searchText] : null,
       onFilter: (value, record) =>
         record.name.includes(value as string) ||
@@ -559,57 +594,43 @@ const Patients: React.FC = () => {
       title: '门诊号',
       dataIndex: 'outpatient_number',
       key: 'outpatient_number',
+      width: 130,
     },
     {
       title: '就诊卡号',
       dataIndex: 'medical_card_number',
       key: 'medical_card_number',
+      width: 150,
     },
     {
       title: '电话',
       dataIndex: 'phone',
       key: 'phone',
+      width: 130,
     },
     {
       title: '诊断',
       dataIndex: 'diagnosis',
       key: 'diagnosis',
+      width: 560,
       filteredValue: diagnosisFilter ? [diagnosisFilter] : null,
       onFilter: (value, record) => record.diagnosis?.includes(value as string) ?? false,
-      render: (text) => {
-        if (!text) return '-';
-        const items = text.split(',').map((s: string) => s.trim()).filter(Boolean);
-        return (
-          <Space size={[0, 4]} wrap>
-            {items.map((item: string, idx: number) => (
-              <Tag key={idx} color="blue">{item}</Tag>
-            ))}
-          </Space>
-        );
-      },
+      render: (text) => renderCompactTags(text, 'blue', 520),
     },
     {
       title: '药物',
       dataIndex: 'drug_type',
       key: 'drug_type',
+      width: 260,
       filteredValue: drugFilter ? [drugFilter] : null,
       onFilter: (value, record) => record.drug_type?.includes(value as string) ?? false,
-      render: (text) => {
-        if (!text) return '-';
-        const items = text.split(',').map((s: string) => s.trim()).filter(Boolean);
-        return (
-          <Space size={[0, 4]} wrap>
-            {items.map((item: string, idx: number) => (
-              <Tag key={idx} color={item === '法瑞西单抗' ? 'purple' : 'default'}>{item}</Tag>
-            ))}
-          </Space>
-        );
-      },
+      render: (text) => renderCompactTags(text, 'default', 230),
     },
     {
       title: '患者类型',
       dataIndex: 'patient_type',
       key: 'patient_type',
+      width: 120,
       render: (text, record) => (
         <span>
           <Tag color={text === '初治' ? 'blue' : 'orange'}>{text || '-'}</Tag>
@@ -622,6 +643,7 @@ const Patients: React.FC = () => {
     {
       title: '治疗眼',
       key: 'eye',
+      width: 100,
       filteredValue: eyeFilter ? [eyeFilter] : null,
       onFilter: (value, record) => {
         if (value === 'left') return !!record.left_eye;
@@ -638,6 +660,7 @@ const Patients: React.FC = () => {
     {
       title: '操作',
       key: 'action',
+      width: 300,
       render: (_, record) => (
         <Space>
           <Button icon={<EditOutlined />} onClick={() => handleEdit(record)}>
@@ -739,6 +762,8 @@ const Patients: React.FC = () => {
       </div>
       <Table 
         columns={columns} 
+        tableLayout="fixed"
+        scroll={{ x: 1460 }}
         dataSource={patients.filter(p => {
           const matchText = !searchText || p.name.includes(searchText) || (p.phone?.includes(searchText) ?? false) || (p.outpatient_number?.includes(searchText) ?? false);
           const matchDate = !dateRange || !dateRange[0] || !dateRange[1] || (
